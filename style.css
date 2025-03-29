@@ -1,0 +1,60 @@
+body {
+    margin: 0;
+    background: #32CD32; /* Grass-like green */
+    overflow: hidden;
+    position: relative;
+}
+
+#myCanvas {
+    background: transparent;
+    display: block;
+    margin: 0 auto;
+}
+
+.side-panel {
+    position: absolute;
+    top: 10px;
+    width: 180px;
+    padding: 10px;
+    border: 1px solid #FFD700;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    color: white;
+    font-family: Arial, sans-serif;
+    text-align: center;
+}
+
+#speedPanel {
+    right: 10px;
+    background: #1c1d1bcc; 
+}
+
+#freqPanel {
+    left: 10px;
+    background: #1c1d1bcc; /* Blue for Frequency Info */
+}
+
+.side-panel h3 {
+    margin: 0 0 8px 0;
+    font-size: 16px;
+    text-transform: uppercase;
+    color: #FFD700;
+}
+
+.side-panel p {
+    margin: 3px 0;
+    font-size: 14px;
+}
+
+#waveToggle {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    padding: 5px 10px;
+    font-size: 14px;
+    color: white;
+    background: #800080;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+}

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<head>
+    <meta charset="UTF-8">
+    <title>Doppler Effect Simulation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <canvas id="myCanvas"></canvas>
+    <div id="speedPanel" class="side-panel">
+        <h3>Speed Info</h3>
+        <p>Speed: <span id="speedValue">0</span> units</p>
+        <p>Max Speed: <span id="maxSpeedValue">40</span> units</p>
+    </div>
+    <div id="freqPanel" class="side-panel">
+        <h3>Frequency Info</h3>
+        <p>Received Freq: <span id="freqValue"></span></p>
+    </div>
+    <button id="waveToggle">TOGGLE WAVES</button>
+    <script src="soundWave.js"></script>
+    <script src="microphone.js"></script>
+    <script src="utils.js"></script>
+    <script src="road.js"></script>
+    <script src="controls.js"></script>
+    <script src="car.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
