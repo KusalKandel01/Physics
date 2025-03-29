@@ -6,15 +6,13 @@ const road = new Road(canvas.width / 2, canvas.width * 0.9);
 const car = new Car(road.getLaneCenter(1), WORLD_HEIGHT/2, 30, 50);
 const microphone = new Microphone(road.getRoadCenter(), WORLD_HEIGHT/2 - 400);
 
-// Control mode (true = ambulance, false = microphone)
 let controlAmbulance = true;
 const controlToggle = document.getElementById("controlToggle");
 
-// Customizable settings
 let settings = {
     minFreq: 500,
     maxFreq: 700,
-    maxSpeed: 144 // km/h
+    maxSpeed: 144
 };
 
 let neeNaw = "nee";
@@ -31,19 +29,21 @@ let lastFrequencyData = {
 controlToggle.addEventListener("click", () => {
     controlAmbulance = !controlAmbulance;
     controlToggle.textContent = `CONTROL: ${controlAmbulance ? 'AMBULANCE' : 'MICROPHONE'}`;
-    
-    // Reset controls when switching
     car.controls.reset();
     microphone.controls.reset();
+    
+    // Reset positions when switching
+    if (controlAmbulance) {
+        microphone.resetPosition();
+    } else {
+        car.resetPosition();
+    }
 });
 
-// Apply settings from UI
 document.getElementById("applySettings").addEventListener("click", () => {
     settings.minFreq = parseInt(document.getElementById("minFreq").value);
     settings.maxFreq = parseInt(document.getElementById("maxFreq").value);
     settings.maxSpeed = parseInt(document.getElementById("maxSpeed").value);
-    
-    // Convert km/h to game units (144 km/h = 4 units)
     car.maxSpeed = settings.maxSpeed / 36;
     document.getElementById("maxSpeedValue").textContent = settings.maxSpeed;
 });
@@ -102,10 +102,6 @@ function animate() {
     } else {
         microphone.update();
     }
-    
-    // Boundary checks
-    if (car.y < 0) car.y = 0;
-    if (car.y > WORLD_HEIGHT) car.y = WORLD_HEIGHT;
 
     for (let i = soundWave.length - 1; i >= 0; i--) {
         soundWave[i].update();

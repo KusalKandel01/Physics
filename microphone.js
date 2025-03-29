@@ -1,5 +1,7 @@
 class Microphone {
     constructor(x, y) {
+        this.originalX = x;
+        this.originalY = y;
         this.x = x;
         this.y = y;
         this.speed = 0;
@@ -19,15 +21,19 @@ class Microphone {
         this.isImageLoaded = false;
     }
 
+    resetPosition() {
+        this.x = this.originalX;
+        this.y = this.originalY;
+    }
+
     update() {
         this.speed = 0;
         if (this.controls.up) this.speed = -this.maxSpeed;
         if (this.controls.down) this.speed = this.maxSpeed;
         
         this.y += this.speed;
-        
-        // Keep microphone within world bounds
         this.y = Math.max(0, Math.min(4000, this.y));
+        this.x = this.originalX; // Always stay centered
     }
 
     receive(soundWaves) {

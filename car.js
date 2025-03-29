@@ -1,5 +1,7 @@
 class Car {
     constructor(x, y, width, height) {
+        this.originalX = x;
+        this.originalY = y;
         this.x = x;
         this.y = y;
         this.width = width;
@@ -7,7 +9,7 @@ class Car {
 
         this.speed = 0;
         this.acceleration = 0.15;
-        this.maxSpeed = 4; // Default (144 km/h)
+        this.maxSpeed = 4;
         this.friction = 0.1;
         this.angle = 0;
 
@@ -17,6 +19,13 @@ class Car {
         this.image.src = "Ambulance.png";
         this.image.onload = () => this.isImageLoaded = true;
         this.isImageLoaded = false;
+    }
+
+    resetPosition() {
+        this.x = this.originalX;
+        this.y = this.originalY;
+        this.speed = 0;
+        this.angle = 0;
     }
 
     update() {
@@ -45,7 +54,6 @@ class Car {
         const newX = this.x - Math.sin(this.angle) * this.speed;
         const newY = this.y - Math.cos(this.angle) * this.speed;
 
-        // Road boundaries
         const leftBoundary = road.left + road.curbs + this.width / 2;
         const rightBoundary = road.right - road.curbs - this.width / 2;
 
