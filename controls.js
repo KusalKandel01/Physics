@@ -1,27 +1,32 @@
 class Controls {
     constructor() {
+        this.reset();
+        this.#addKeyboardListeners();
+    }
+
+    reset() {
         this.forward = false;
         this.reverse = false;
         this.left = false;
         this.right = false;
-
-        this.#addKeyboardListeners();
     }
 
     #addKeyboardListeners() {
         document.onkeydown = (event) => {
             switch (event.key) {
                 case "ArrowUp":
-                    this.forward = true;
+                    if (controlAmbulance) car.controls.forward = true;
+                    else microphone.controls.up = true;
                     break;
                 case "ArrowDown":
-                    this.reverse = true;
+                    if (controlAmbulance) car.controls.reverse = true;
+                    else microphone.controls.down = true;
                     break;
                 case "ArrowLeft":
-                    this.left = true;
+                    if (controlAmbulance) car.controls.left = true;
                     break;
                 case "ArrowRight":
-                    this.right = true;
+                    if (controlAmbulance) car.controls.right = true;
                     break;
             }
         };
@@ -29,16 +34,18 @@ class Controls {
         document.onkeyup = (event) => {
             switch (event.key) {
                 case "ArrowUp":
-                    this.forward = false;
+                    if (controlAmbulance) car.controls.forward = false;
+                    else microphone.controls.up = false;
                     break;
                 case "ArrowDown":
-                    this.reverse = false;
+                    if (controlAmbulance) car.controls.reverse = false;
+                    else microphone.controls.down = false;
                     break;
                 case "ArrowLeft":
-                    this.left = false;
+                    if (controlAmbulance) car.controls.left = false;
                     break;
                 case "ArrowRight":
-                    this.right = false;
+                    if (controlAmbulance) car.controls.right = false;
                     break;
             }
         };

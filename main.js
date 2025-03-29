@@ -6,6 +6,10 @@ const road = new Road(canvas.width / 2, canvas.width * 0.9);
 const car = new Car(road.getLaneCenter(1), WORLD_HEIGHT/2, 30, 50);
 const microphone = new Microphone(road.getRoadCenter(), WORLD_HEIGHT/2 - 400);
 
+// Control mode (true = ambulance, false = microphone)
+let controlAmbulance = true;
+const controlToggle = document.getElementById("controlToggle");
+
 // Customizable settings
 let settings = {
     minFreq: 500,
@@ -22,6 +26,16 @@ let lastFrequencyData = {
     time: 0,
     shift: 0
 };
+
+// Toggle control mode
+controlToggle.addEventListener("click", () => {
+    controlAmbulance = !controlAmbulance;
+    controlToggle.textContent = `CONTROL: ${controlAmbulance ? 'AMBULANCE' : 'MICROPHONE'}`;
+    
+    // Reset controls when switching
+    car.controls.reset();
+    microphone.controls.reset();
+});
 
 // Apply settings from UI
 document.getElementById("applySettings").addEventListener("click", () => {
@@ -82,18 +96,16 @@ function updateFreqDisplay() {
 
 function animate() {
     if (!ctx) return;
-    car.update();
-    microphone.update();
+    
+    if (controlAmbulance) {
+        car.update();
+    } else {
+        microphone.update();
+    }
     
     // Boundary checks
-    if (car.y < 0) {
-        car.y = 0;
-        car.speed = 0;
-    }
-    if (car.y > WORLD_HEIGHT) {
-        car.y = WORLD_HEIGHT;
-        car.speed = 0;
-    }
+    if (car.y < 0) car.y = 0;
+    if (car.y > WORLD_HEIGHT) car.y = WORLD_HEIGHT;
 
     for (let i = soundWave.length - 1; i >= 0; i--) {
         soundWave[i].update();
