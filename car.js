@@ -7,7 +7,7 @@ class Car {
 
         this.speed = 0;
         this.acceleration = 0.15;
-        this.maxSpeed = 4;
+        this.maxSpeed = 4; // Default (144 km/h)
         this.friction = 0.1;
         this.angle = 0;
 
@@ -45,6 +45,7 @@ class Car {
         const newX = this.x - Math.sin(this.angle) * this.speed;
         const newY = this.y - Math.cos(this.angle) * this.speed;
 
+        // Road boundaries
         const leftBoundary = road.left + road.curbs + this.width / 2;
         const rightBoundary = road.right - road.curbs - this.width / 2;
 
@@ -58,7 +59,7 @@ class Car {
             this.x = newX;
         }
 
-        if (newY > road.top && newY < road.bottom) this.y = newY;
+        this.y = newY;
     }
 
     draw(ctx) {
@@ -71,7 +72,6 @@ class Car {
         const newWidth = this.width * scaleFactor;
         const newHeight = this.height * scaleFactor / 1.5;
 
-        // Draw shadow
         ctx.shadowBlur = 15;
         ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
         ctx.shadowOffsetX = 5;
@@ -79,7 +79,6 @@ class Car {
 
         ctx.drawImage(this.image, -newWidth / 2, -newHeight / 2, newWidth, newHeight);
 
-        // Reset shadow settings
         ctx.shadowBlur = 0;
         ctx.shadowOffsetX = 0;
         ctx.shadowOffsetY = 0;

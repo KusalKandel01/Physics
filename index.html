@@ -6,22 +6,41 @@
 </head>
 <body>
     <canvas id="myCanvas"></canvas>
+    <div id="controlsPanel" class="side-panel">
+        <h3>Controls</h3>
+        <div class="control-group">
+            <label for="minFreq">Low Frequency (Hz):</label>
+            <input type="number" id="minFreq" value="500" min="100" max="2000">
+        </div>
+        <div class="control-group">
+            <label for="maxFreq">High Frequency (Hz):</label>
+            <input type="number" id="maxFreq" value="700" min="100" max="2000">
+        </div>
+        <div class="control-group">
+            <label for="maxSpeed">Max Speed (km/h):</label>
+            <input type="number" id="maxSpeed" value="144" min="10" max="300">
+        </div>
+        <button id="applySettings">APPLY SETTINGS</button>
+    </div>
     <div id="speedPanel" class="side-panel">
         <h3>Speed Info</h3>
-        <p>Speed: <span id="speedValue">0</span> units</p>
-        <p>Max Speed: <span id="maxSpeedValue">40</span> units</p>
+        <p>Speed: <span id="speedValue">0</span> km/h</p>
+        <p>Max Speed: <span id="maxSpeedValue">144</span> km/h</p>
     </div>
     <div id="freqPanel" class="side-panel">
         <h3>Frequency Info</h3>
-        <p>Received Freq: <span id="freqValue"></span></p>
+        <div class="freq-display">
+            <p>Emitted: <span id="emittedFreqValue">---</span></p>
+            <p>Received: <span id="receivedFreqValue">---</span></p>
+        </div>
     </div>
     <button id="waveToggle">TOGGLE WAVES</button>
-    <script src="soundWave.js"></script>
-    <script src="microphone.js"></script>
     <script src="utils.js"></script>
     <script src="road.js"></script>
     <script src="controls.js"></script>
     <script src="car.js"></script>
+    <script src="soundWave.js"></script>
+    <script src="microphone.js"></script>
     <script src="main.js"></script>
 </body>
 </html>

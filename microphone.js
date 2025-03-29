@@ -1,6 +1,6 @@
 class Microphone {
     constructor(x, y) {
-        this.x = x; // Centered at lane 1
+        this.x = x;
         this.y = y;
         this.image = new Image();
         this.image.src = "https://cdn.pixabay.com/photo/2017/11/10/12/31/music-2936214_1280.png";
@@ -11,13 +11,13 @@ class Microphone {
     receive(soundWaves) {
         for (const soundWave of soundWaves) {
             if (dist(soundWave, this) <= soundWave.radius) {
-                soundWave.play();
+                soundWave.play(this);
             }
         }
     }
 
     update() {
-        // No pulsing needed since detection range is removed
+        // No pulsing needed
     }
 
     draw(ctx) {
@@ -29,7 +29,8 @@ class Microphone {
         ctx.translate(this.x, this.y);
 
         const scale = 0.15;
-        ctx.drawImage(this.image, -this.image.width * scale / 2, -this.image.height * scale / 2, this.image.width * scale, this.image.height * scale);
+        ctx.drawImage(this.image, -this.image.width * scale / 2, -this.image.height * scale / 2, 
+                     this.image.width * scale, this.image.height * scale);
 
         ctx.restore();
     }
