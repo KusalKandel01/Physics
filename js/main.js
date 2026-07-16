@@ -1,0 +1,222 @@
+// ============================================================================
+// main.js — orchestration + animation loop
+// ============================================================================
+
+(function () {
+  const rng = mulberry32(1337);
+  const settings = UI.getSettings();
+  UI.applySettingsToInputs();
+  UI.initControls();
+
+  const sceneCtx = new SceneCtx(document.getElementById("scene"));
+  sceneCtx.setMode(settings.camera);
+  sceneCtx.applyNight(settings.night, true);
+
+  const road = buildRoad();
+  sceneCtx.scene.add(road);
+  const environment = buildEnvironment(rng);
+  sceneCtx.scene.add(environment);
+  sceneCtx.setLampsVisible(environment.userData.lamps);
+
+  const roadLeft = -ROAD_WIDTH / 2 + CURB + 0.15;
+  const roadRight = ROAD_WIDTH / 2 - CURB - 0.15;
+
+  const car = new Ambulance(laneCenterX(1), -PLAY_HALF_LEN + 40);
+  car.maxSpeed = settings.maxSpeed / 3.6;
+  sceneCtx.scene.add(car.group);
+  inputController.bindCar(car);
+  inputController.setAutopilot(settings.driver === "auto");
+
+  const dopplerField = new DopplerField();
+  const waveRingPool = new WaveRingPool(sceneCtx.scene);
+  waveRingPool.setVisible(settings.showWaves);
+
+  let listenerIdSeq = 1;
+  const listeners = [];
+  function addListener(z) {
+    const L = new Listener(listenerIdSeq++, ROAD_WIDTH / 2 + 6, z ?? 0, listeners.length);
+    listeners.push(L);
+    sceneCtx.scene.add(L.group);
+    UI.syncListeners(listeners);
+    return L;
+  }
+  function removeListener(id) {
+    if (listeners.length <= 1) return;
+    const idx = listeners.findIndex(l => l.id === id);
+    if (idx === -1) return;
+    listeners[idx].dispose(sceneCtx.scene);
+    listeners.splice(idx, 1);
+    UI.syncListeners(listeners);
+  }
+  addListener(0);
+
+  // ---------------------------------------------------------------- presets
+  const PRESETS = {
+    ambulance: { minFreq: 500, maxFreq: 700, maxSpeed: 144, soundSpeed: 343 },
+    train: { minFreq: 120, maxFreq: 175, maxSpeed: 160, soundSpeed: 343 },
+    f1: { minFreq: 900, maxFreq: 1450, maxSpeed: 320, soundSpeed: 343 },
+    jet: { minFreq: 200, maxFreq: 260, maxSpeed: 320, soundSpeed: 220 },
+  };
+
+  // ---------------------------------------------------------------- state
+  let running = true;
+  let simClock = 0;
+  let toneTimer = 0;
+  let tone = "nee";
+  let lastEmittedFreq = settings.maxFreq;
+  const lastReceivedByListener = new Map();
+  let autopilotState = "forward";
+  let autopilotTurnDir = 1;
+  let autopilotTurnTarget = 0;
+
+  UI.setPlayIcon(true);
+
+  // ---------------------------------------------------------------- bus wiring
+  bus.on("settings-changed", ({ key, value }) => {
+    settings[key] = value;
+    if (key === "maxSpeed") car.maxSpeed = value / 3.6;
+    if (key === "audioEnabled") audioEngine.setEnabled(value);
+    if (key === "volume") audioEngine.setVolume(value / 100);
+    if (key === "showWaves") waveRingPool.setVisible(value);
+  });
+
+  bus.on("driver-changed", mode => {
+    settings.driver = mode;
+    inputController.setAutopilot(mode === "auto");
+    autopilotState = "forward";
+  });
+
+  bus.on("camera-changed", mode => sceneCtx.setMode(mode));
+
+  bus.on("preset-selected", name => {
+    const p = PRESETS[name];
+    if (!p) return;
+    Object.entries(p).forEach(([k, v]) => UI.setSetting(k, v, true));
+    car.maxSpeed = p.maxSpeed / 3.6;
+    lastEmittedFreq = p.maxFreq;
+  });
+
+  bus.on("toggle-play", () => { running = !running; UI.setPlayIcon(running); });
+
+  bus.on("reset-request", () => {
+    car.resetPosition();
+    car.x = laneCenterX(1); car.z = -PLAY_HALF_LEN + 40;
+    dopplerField.clear();
+    waveRingPool.clear();
+    simClock = 0; toneTimer = 0; tone = "nee";
+    autopilotState = "forward";
+    lastReceivedByListener.clear();
+    UI.resetAll();
+  });
+
+  bus.on("night-toggle", night => sceneCtx.applyNight(night));
+
+  bus.on("listener-add-request", () => addListener(clamp((rng() - 0.5) * PLAY_HALF_LEN, -PLAY_HALF_LEN + 20, PLAY_HALF_LEN - 20)));
+  bus.on("listener-remove-request", id => removeListener(id));
+  bus.on("listener-move", ({ id, z }) => {
+    const L = listeners.find(l => l.id === id);
+    if (L) L.setZ(z, 1 / 60);
+  });
+
+  // first user gesture unlocks audio
+  ["pointerdown", "keydown"].forEach(evt => window.addEventListener(evt, () => audioEngine.resume(), { once: true }));
+  audioEngine.setEnabled(settings.audioEnabled);
+  audioEngine.setVolume(settings.volume / 100);
+
+  // ---------------------------------------------------------------- autopilot
+  function driveAutopilot(dt) {
+    if (autopilotState === "forward") {
+      car.controls.forward = true; car.controls.reverse = false;
+      car.controls.left = false; car.controls.right = false;
+      const headingPositive = Math.cos(car.angle) >= 0;
+      if (headingPositive && car.z > PLAY_HALF_LEN - 40) {
+        autopilotState = "turning"; autopilotTurnDir = 1;
+        autopilotTurnTarget = car.angle + Math.PI;
+        car.speed = Math.min(car.speed, 7); car.x = 0;
+      } else if (!headingPositive && car.z < -PLAY_HALF_LEN + 40) {
+        autopilotState = "turning"; autopilotTurnDir = -1;
+        autopilotTurnTarget = car.angle - Math.PI;
+        car.speed = Math.min(Math.abs(car.speed), 7);
+        car.speed = Math.abs(car.speed);
+        car.x = 0;
+      }
+    } else {
+      car.controls.forward = true; car.controls.reverse = false;
+      car.controls.left = autopilotTurnDir > 0;
+      car.controls.right = autopilotTurnDir < 0;
+      car.speed = clamp(car.speed, 4, 8);
+      if (Math.abs(((car.angle - autopilotTurnTarget + Math.PI * 3) % (Math.PI * 2)) - Math.PI) < 0.06) {
+        car.angle = autopilotTurnTarget;
+        car.controls.left = false; car.controls.right = false;
+        autopilotState = "forward";
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- main loop
+  let prevT = nowMs();
+  function frame() {
+    const t = nowMs();
+    let dt = (t - prevT) / 1000;
+    prevT = t;
+    dt = clamp(dt, 0, 0.05);
+
+    if (running) {
+      simClock += dt;
+
+      if (settings.driver === "auto") driveAutopilot(dt);
+      const carState = car.update(dt, roadLeft, roadRight);
+
+      toneTimer -= dt;
+      if (toneTimer <= 0) {
+        toneTimer = 0.62;
+        tone = tone === "nee" ? "naw" : "nee";
+        lastEmittedFreq = tone === "nee" ? settings.maxFreq : settings.minFreq;
+        dopplerField.emit({
+          x: car.x, z: car.z, sourceFreq: lastEmittedFreq, tone,
+          sourceVel: { x: carState.vx, z: carState.vz },
+          soundSpeed: settings.soundSpeed, emittedAt: simClock,
+        });
+        car.setToneFlash(tone);
+      }
+
+      dopplerField.update(dt);
+
+      listeners.forEach((L, idx) => {
+        L.updatePulse(dt);
+        const hit = dopplerField.poll(L);
+        if (hit) {
+          L.pulse = 1;
+          lastReceivedByListener.set(L.id, hit.frequency);
+          UI.updateListenerFreq(L.id, fmt(hit.frequency, 0) + " Hz");
+          UI.pushLog({ t: fmt(simClock, 1), f0: fmt(hit.event.sourceFreq, 0), f: fmt(hit.frequency, 0), df: fmt(hit.frequency - hit.event.sourceFreq, 0) });
+          if (idx === 0) {
+            audioEngine.playTone(hit.frequency, hit.distance);
+            UI.updateFreqReadout(hit.event.sourceFreq, hit.frequency);
+            const thetaDeg = Math.acos(clamp(hit.vSrcTowardListener / Math.max(1e-3, Math.hypot(carState.vx, carState.vz) || 1), -1, 1)) * 180 / Math.PI;
+            UI.updateFormula(settings.soundSpeed, hit.vSrcTowardListener, isFinite(thetaDeg) ? thetaDeg : 0, "Mic 1");
+          }
+        }
+      });
+
+      UI.pushChartPoint(simClock, lastEmittedFreq, lastReceivedByListener.get(listeners[0]?.id) ?? null);
+      waveRingPool.sync(dopplerField.events, settings.showLabels);
+    }
+
+    sceneCtx.updateCamera({ x: car.x, z: car.z }, car.angle, dt);
+
+    UI.drawScope(audioEngine.getWaveform());
+    UI.drawChart(simClock, settings.minFreq, settings.maxFreq);
+    UI.drawMinimap({ x: car.x, z: car.z, angle: car.angle }, listeners, dopplerField.events, ROAD_WIDTH);
+    const vsMax = settings.maxSpeed / 3.6;
+    const maxShiftRef = settings.maxFreq * settings.soundSpeed / Math.max(30, settings.soundSpeed - vsMax) - settings.maxFreq;
+    UI.updateGauges(Math.abs(car.speed) * 3.6, settings.maxSpeed,
+      (lastReceivedByListener.get(listeners[0]?.id) ?? lastEmittedFreq) - lastEmittedFreq,
+      Math.max(40, maxShiftRef));
+
+    sceneCtx.render();
+    requestAnimationFrame(frame);
+  }
+
+  requestAnimationFrame(() => { UI.hideLoadScreen(); requestAnimationFrame(frame); });
+})();

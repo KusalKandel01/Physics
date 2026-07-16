@@ -1,0 +1,351 @@
+// ============================================================================
+// ui.js — all DOM wiring & 2D HUD drawing (oscilloscope / chart / minimap).
+// Talks to the rest of the app only through `bus` events + the UI namespace.
+// ============================================================================
+
+const PLAY_HALF_LEN = 480;
+
+const DEFAULT_SETTINGS = {
+  minFreq: 500, maxFreq: 700, maxSpeed: 144, soundSpeed: 343,
+  showWaves: true, showLabels: true, audioEnabled: true, volume: 55,
+  driver: "ambulance", camera: "chase", night: true,
+};
+
+const UI = (() => {
+  const $ = id => document.getElementById(id);
+
+  const el = {
+    minFreq: $("minFreq"), minFreqOut: $("minFreqOut"),
+    maxFreq: $("maxFreq"), maxFreqOut: $("maxFreqOut"),
+    maxSpeed: $("maxSpeed"), maxSpeedOut: $("maxSpeedOut"),
+    soundSpeed: $("soundSpeed"), soundSpeedOut: $("soundSpeedOut"),
+    volume: $("volume"), volumeOut: $("volumeOut"),
+    toggleWaves: $("toggleWaves"), toggleLabels: $("toggleLabels"), toggleAudio: $("toggleAudio"),
+    driverSeg: $("driverSeg"), cameraSeg: $("cameraSeg"), presetGrid: $("presetGrid"),
+    listenerList: $("listenerList"), listenerCount: $("listenerCount"), btnAddListener: $("btnAddListener"),
+    speedValue: $("speedValue"), gaugeSpeedArc: $("gaugeSpeedArc"),
+    shiftValue: $("shiftValue"), gaugeShiftArc: $("gaugeShiftArc"),
+    emittedFreqValue: $("emittedFreqValue"), receivedFreqValue: $("receivedFreqValue"),
+    formulaVars: $("formulaVars"),
+    logTableBody: $("logTableBody"), btnExportCsv: $("btnExportCsv"),
+    scopeCanvas: $("scopeCanvas"), chartCanvas: $("chartCanvas"), minimap: $("minimap"),
+    btnPlayPause: $("btnPlayPause"), iconPlay: $("iconPlay"), iconPause: $("iconPause"),
+    btnReset: $("btnReset"), btnTheme: $("btnTheme"), btnHelp: $("btnHelp"), btnCloseHelp: $("btnCloseHelp"),
+    helpModal: $("helpModal"), btnMenuToggle: $("btnMenuToggle"),
+    loadScreen: $("loadScreen"),
+  };
+
+  const scopeCtx = el.scopeCanvas.getContext("2d");
+  const chartCtx = el.chartCanvas.getContext("2d");
+  const mapCtx = el.minimap.getContext("2d");
+
+  let logRows = [];
+  const chartHistory = [];
+  const CHART_WINDOW = 14; // seconds
+
+  // ---------------------------------------------------------------- settings persistence
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem("siren-lab-settings");
+      if (!raw) return { ...DEFAULT_SETTINGS };
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    } catch { return { ...DEFAULT_SETTINGS }; }
+  }
+  function saveSettings(s) {
+    try { localStorage.setItem("siren-lab-settings", JSON.stringify(s)); } catch {}
+  }
+
+  let settings = loadSettings();
+
+  function applySettingsToInputs() {
+    el.minFreq.value = settings.minFreq; el.minFreqOut.textContent = settings.minFreq;
+    el.maxFreq.value = settings.maxFreq; el.maxFreqOut.textContent = settings.maxFreq;
+    el.maxSpeed.value = settings.maxSpeed; el.maxSpeedOut.textContent = settings.maxSpeed;
+    el.soundSpeed.value = settings.soundSpeed; el.soundSpeedOut.textContent = settings.soundSpeed;
+    el.volume.value = settings.volume; el.volumeOut.textContent = settings.volume;
+    el.toggleWaves.checked = settings.showWaves;
+    el.toggleLabels.checked = settings.showLabels;
+    el.toggleAudio.checked = settings.audioEnabled;
+    setSegActive(el.driverSeg, settings.driver, "drive");
+    setSegActive(el.cameraSeg, settings.camera, "cam");
+    document.body.classList.toggle("day", !settings.night);
+  }
+
+  function setSegActive(seg, value, attr) {
+    seg.querySelectorAll("button").forEach(b => b.classList.toggle("active", b.dataset[attr] === value));
+  }
+
+  // ---------------------------------------------------------------- slider wiring
+  function slider(inputEl, outEl, key, cast = Number) {
+    inputEl.addEventListener("input", () => {
+      const v = cast(inputEl.value);
+      outEl.textContent = v;
+      settings[key] = v;
+      saveSettings(settings);
+      bus.emit("settings-changed", { key, value: v, all: settings });
+    });
+  }
+
+  function initControls() {
+    slider(el.minFreq, el.minFreqOut, "minFreq");
+    slider(el.maxFreq, el.maxFreqOut, "maxFreq");
+    slider(el.maxSpeed, el.maxSpeedOut, "maxSpeed");
+    slider(el.soundSpeed, el.soundSpeedOut, "soundSpeed");
+    slider(el.volume, el.volumeOut, "volume");
+
+    el.toggleWaves.addEventListener("change", () => { settings.showWaves = el.toggleWaves.checked; saveSettings(settings); bus.emit("settings-changed", { key: "showWaves", value: settings.showWaves, all: settings }); });
+    el.toggleLabels.addEventListener("change", () => { settings.showLabels = el.toggleLabels.checked; saveSettings(settings); bus.emit("settings-changed", { key: "showLabels", value: settings.showLabels, all: settings }); });
+    el.toggleAudio.addEventListener("change", () => { settings.audioEnabled = el.toggleAudio.checked; saveSettings(settings); bus.emit("settings-changed", { key: "audioEnabled", value: settings.audioEnabled, all: settings }); });
+
+    el.driverSeg.addEventListener("click", e => {
+      const btn = e.target.closest("button"); if (!btn) return;
+      setSegActive(el.driverSeg, btn.dataset.drive, "drive");
+      settings.driver = btn.dataset.drive; saveSettings(settings);
+      bus.emit("driver-changed", settings.driver);
+    });
+
+    el.cameraSeg.addEventListener("click", e => {
+      const btn = e.target.closest("button"); if (!btn) return;
+      setSegActive(el.cameraSeg, btn.dataset.cam, "cam");
+      settings.camera = btn.dataset.cam; saveSettings(settings);
+      bus.emit("camera-changed", settings.camera);
+    });
+    bus.on("key-camera", cam => { setSegActive(el.cameraSeg, cam, "cam"); settings.camera = cam; saveSettings(settings); bus.emit("camera-changed", cam); });
+
+    el.presetGrid.addEventListener("click", e => {
+      const btn = e.target.closest("button"); if (!btn) return;
+      el.presetGrid.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      bus.emit("preset-selected", btn.dataset.preset);
+    });
+
+    el.btnAddListener.addEventListener("click", () => bus.emit("listener-add-request"));
+
+    el.btnPlayPause.addEventListener("click", () => bus.emit("toggle-play"));
+    bus.on("key-space", () => bus.emit("toggle-play"));
+    el.btnReset.addEventListener("click", () => bus.emit("reset-request"));
+    bus.on("key-reset", () => bus.emit("reset-request"));
+
+    el.btnTheme.addEventListener("click", () => {
+      settings.night = !settings.night;
+      document.body.classList.toggle("day", !settings.night);
+      saveSettings(settings);
+      bus.emit("night-toggle", settings.night);
+    });
+
+    el.btnHelp.addEventListener("click", () => el.helpModal.classList.add("show"));
+    el.btnCloseHelp.addEventListener("click", () => el.helpModal.classList.remove("show"));
+    el.helpModal.addEventListener("click", e => { if (e.target === el.helpModal) el.helpModal.classList.remove("show"); });
+    bus.on("key-help", () => el.helpModal.classList.toggle("show"));
+
+    el.btnMenuToggle.addEventListener("click", () => document.body.classList.toggle("panelsOpen"));
+
+    el.btnExportCsv.addEventListener("click", () => {
+      const header = "time_s,emitted_hz,received_hz,shift_hz,listener\n";
+      const body = logRows.map(r => `${r.t},${r.f0},${r.f},${r.df},${r.who}`).join("\n");
+      downloadTextFile("doppler-log.csv", header + body);
+    });
+  }
+
+  function setPlayIcon(isPlaying) {
+    el.iconPlay.style.display = isPlaying ? "none" : "block";
+    el.iconPause.style.display = isPlaying ? "block" : "none";
+  }
+
+  function hideLoadScreen() { el.loadScreen.classList.add("hidden"); }
+
+  // ---------------------------------------------------------------- listener list DOM
+  function syncListeners(listeners) {
+    el.listenerCount.textContent = listeners.length;
+    el.listenerList.innerHTML = "";
+    listeners.forEach((L, i) => {
+      const li = document.createElement("li");
+      li.className = "listenerChip";
+      const colorHex = "#" + L.color.toString(16).padStart(6, "0");
+      li.innerHTML = `
+        <span class="swatch" style="background:${colorHex};color:${colorHex}"></span>
+        <span class="lName">Mic ${i + 1}</span>
+        <input type="range" min="${-PLAY_HALF_LEN}" max="${PLAY_HALF_LEN}" step="2" value="${L.z}">
+        <span class="lFreq" data-role="freq">&mdash;</span>
+        <button class="lDel" title="Remove">✕</button>`;
+      const range = li.querySelector("input");
+      range.addEventListener("input", () => bus.emit("listener-move", { id: L.id, z: Number(range.value) }));
+      li.querySelector(".lDel").addEventListener("click", () => bus.emit("listener-remove-request", L.id));
+      li._freqEl = li.querySelector('[data-role="freq"]');
+      li._id = L.id;
+      el.listenerList.appendChild(li);
+    });
+  }
+
+  function updateListenerFreq(id, freqText) {
+    const li = [...el.listenerList.children].find(n => n._id === id);
+    if (li) li._freqEl.textContent = freqText;
+  }
+
+  // ---------------------------------------------------------------- gauges / readouts
+  function updateGauges(speedKmh, maxSpeedKmh, shiftHz, maxShiftHz) {
+    const ARC = 157;
+    const sFrac = clamp(speedKmh / Math.max(1, maxSpeedKmh), 0, 1);
+    el.gaugeSpeedArc.setAttribute("stroke-dashoffset", ARC - ARC * sFrac);
+    el.speedValue.textContent = fmt(speedKmh, 0);
+
+    const shiftFrac = clamp(Math.abs(shiftHz) / Math.max(1, maxShiftHz), 0, 1);
+    el.gaugeShiftArc.setAttribute("stroke-dashoffset", ARC - ARC * shiftFrac);
+    el.shiftValue.textContent = (shiftHz >= 0 ? "+" : "") + fmt(shiftHz, 0);
+  }
+
+  function updateFreqReadout(emitted, received) {
+    el.emittedFreqValue.textContent = emitted === null ? "—" : fmt(emitted, 0) + " Hz";
+    el.receivedFreqValue.textContent = received === null ? "—" : fmt(received, 0) + " Hz";
+  }
+
+  function updateFormula(v, vs, theta, label) {
+    if (v === null) { el.formulaVars.textContent = "waiting for first wavefront…"; return; }
+    el.formulaVars.textContent = `${label}: v=${fmt(v, 0)} m/s, vₛcosθ=${fmt(vs, 1)} m/s, θ=${fmt(theta, 0)}°`;
+  }
+
+  // ---------------------------------------------------------------- log
+  function pushLog(entry) {
+    logRows.push(entry);
+    if (logRows.length > 400) logRows.shift();
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${entry.t}</td><td>${entry.f0}</td><td>${entry.f}</td><td>${entry.df >= 0 ? "+" : ""}${entry.df}</td>`;
+    el.logTableBody.appendChild(tr);
+    while (el.logTableBody.children.length > 60) el.logTableBody.removeChild(el.logTableBody.firstChild);
+    el.logTableBody.parentElement.parentElement.scrollTop = 1e9;
+  }
+
+  function pushChartPoint(t, emitted, received) {
+    chartHistory.push({ t, emitted, received });
+    while (chartHistory.length && t - chartHistory[0].t > CHART_WINDOW) chartHistory.shift();
+  }
+
+  // ---------------------------------------------------------------- oscilloscope
+  function drawScope(data) {
+    const w = el.scopeCanvas.width, h = el.scopeCanvas.height;
+    scopeCtx.clearRect(0, 0, w, h);
+    scopeCtx.strokeStyle = "rgba(255,255,255,.06)";
+    scopeCtx.beginPath(); scopeCtx.moveTo(0, h / 2); scopeCtx.lineTo(w, h / 2); scopeCtx.stroke();
+    if (!data) { return; }
+    scopeCtx.lineWidth = 1.6;
+    scopeCtx.strokeStyle = "#3fd6ff";
+    scopeCtx.shadowColor = "#3fd6ff"; scopeCtx.shadowBlur = 4;
+    scopeCtx.beginPath();
+    const step = w / data.length;
+    for (let i = 0; i < data.length; i++) {
+      const v = data[i] / 128 - 1;
+      const y = h / 2 + v * (h / 2 - 4);
+      if (i === 0) scopeCtx.moveTo(0, y); else scopeCtx.lineTo(i * step, y);
+    }
+    scopeCtx.stroke();
+    scopeCtx.shadowBlur = 0;
+  }
+
+  // ---------------------------------------------------------------- freq/time chart
+  function drawChart(nowT, minF, maxF) {
+    const w = el.chartCanvas.width, h = el.chartCanvas.height;
+    chartCtx.clearRect(0, 0, w, h);
+    const lo = Math.max(0, minF * 0.7), hi = maxF * 1.4;
+    const toX = t => w - ((nowT - t) / CHART_WINDOW) * w;
+    const toY = f => h - ((f - lo) / Math.max(1, hi - lo)) * h;
+
+    chartCtx.strokeStyle = "rgba(255,255,255,.06)";
+    for (let i = 1; i < 4; i++) { const y = (h / 4) * i; chartCtx.beginPath(); chartCtx.moveTo(0, y); chartCtx.lineTo(w, y); chartCtx.stroke(); }
+
+    function line(key, color) {
+      chartCtx.beginPath();
+      let started = false;
+      for (const p of chartHistory) {
+        if (p[key] == null) continue;
+        const x = toX(p.t), y = toY(p[key]);
+        if (x < -5) continue;
+        if (!started) { chartCtx.moveTo(x, y); started = true; } else chartCtx.lineTo(x, y);
+      }
+      chartCtx.strokeStyle = color; chartCtx.lineWidth = 1.8; chartCtx.stroke();
+    }
+    line("emitted", "#3fd6ff");
+    line("received", "#ff3d6e");
+  }
+
+  // ---------------------------------------------------------------- minimap
+  function drawMinimap(car, listeners, waveEvents, roadWidth) {
+    const w = el.minimap.width, h = el.minimap.height;
+    mapCtx.clearRect(0, 0, w, h);
+    mapCtx.fillStyle = "#060a10";
+    mapCtx.fillRect(0, 0, w, h);
+
+    const pad = 18;
+    const usableH = h - pad * 2;
+    const zScale = usableH / (PLAY_HALF_LEN * 2.4);
+    const xScale = (w - pad * 2) / (roadWidth * 2.4);
+
+    const wx = x => w / 2 + x * xScale;
+    const wy = z => h / 2 - z * zScale;
+
+    // road band
+    mapCtx.fillStyle = "rgba(255,255,255,.05)";
+    mapCtx.fillRect(wx(-roadWidth / 2), 0, roadWidth * xScale, h);
+    mapCtx.strokeStyle = "rgba(255,255,255,.12)";
+    mapCtx.setLineDash([4, 6]);
+    mapCtx.beginPath(); mapCtx.moveTo(w / 2, 0); mapCtx.lineTo(w / 2, h); mapCtx.stroke();
+    mapCtx.setLineDash([]);
+
+    // wave rings
+    if (waveEvents) for (const ev of waveEvents) {
+      const r = ev.radius * zScale;
+      if (r > Math.max(w, h)) continue;
+      mapCtx.beginPath();
+      mapCtx.arc(wx(ev.x), wy(ev.z), r, 0, Math.PI * 2);
+      mapCtx.strokeStyle = ev.tone === "nee" ? "rgba(255,61,110,.5)" : "rgba(63,214,255,.5)";
+      mapCtx.lineWidth = 1;
+      mapCtx.stroke();
+    }
+
+    // listeners
+    listeners.forEach(L => {
+      mapCtx.beginPath();
+      mapCtx.arc(wx(L.x), wy(L.z), 4, 0, Math.PI * 2);
+      mapCtx.fillStyle = "#" + L.color.toString(16).padStart(6, "0");
+      mapCtx.fill();
+    });
+
+    // car (triangle)
+    const cx = wx(car.x), cz = wy(car.z);
+    mapCtx.save();
+    mapCtx.translate(cx, cz);
+    mapCtx.rotate(car.angle);
+    mapCtx.beginPath();
+    mapCtx.moveTo(0, -8); mapCtx.lineTo(5, 6); mapCtx.lineTo(-5, 6); mapCtx.closePath();
+    mapCtx.fillStyle = "#ffffff";
+    mapCtx.fill();
+    mapCtx.restore();
+  }
+
+  const SLIDER_MAP = {
+    minFreq: [el.minFreq, el.minFreqOut], maxFreq: [el.maxFreq, el.maxFreqOut],
+    maxSpeed: [el.maxSpeed, el.maxSpeedOut], soundSpeed: [el.soundSpeed, el.soundSpeedOut],
+    volume: [el.volume, el.volumeOut],
+  };
+  function setSetting(key, value, silent = false) {
+    settings[key] = value;
+    const pair = SLIDER_MAP[key];
+    if (pair) { pair[0].value = value; pair[1].textContent = value; }
+    saveSettings(settings);
+    if (!silent) bus.emit("settings-changed", { key, value, all: settings });
+  }
+
+  function resetAll() {
+    chartHistory.length = 0;
+    logRows = [];
+    el.logTableBody.innerHTML = "";
+    updateFreqReadout(null, null);
+    updateFormula(null);
+    el.listenerList.querySelectorAll('[data-role="freq"]').forEach(n => n.textContent = "—");
+  }
+
+  return {
+    el, initControls, applySettingsToInputs, getSettings: () => settings, setSetting, setPlayIcon, hideLoadScreen,
+    syncListeners, updateListenerFreq, updateGauges, updateFreqReadout, updateFormula,
+    pushLog, pushChartPoint, drawScope, drawChart, drawMinimap, resetAll,
+  };
+})();
