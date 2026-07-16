@@ -1,5 +1,7 @@
 // ============================================================================
-// scene.js — renderer, lighting, sky, and camera-mode logic
+// scene.js — renderer, lighting, sky, and camera-mode logic.
+// Every camera mode is drag-to-rotate + wheel-to-zoom, not just "Orbit" —
+// the mode buttons just choose the default framing you start from.
 // ============================================================================
 
 class SceneCtx {
@@ -11,17 +13,23 @@ class SceneCtx {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 3000);
+    this.camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 4000);
 
     this.mode = "chase";
     this.night = true;
-    this.orbit = { theta: 0.6, phi: 1.15, radius: 16, target: new THREE.Vector3() };
+
+    // orbit mode: fully free spherical camera around the car
+    this.orbit = { theta: 0.6, phi: 1.15, radius: 16 };
+    // chase / side modes: user-adjustable offset on top of the mode's default framing
+    this.free = { yaw: 0, pitch: 0, zoom: 1 };
+    this.topZoom = 1;
+
     this._dragging = false;
     this._lastPointer = null;
 
     this._buildLights();
     this._buildSky();
-    this._bindOrbitInput();
+    this._bindCameraInput();
     this._onResize();
     window.addEventListener("resize", () => this._onResize());
   }
@@ -71,7 +79,7 @@ class SceneCtx {
     this.night = night;
     if (night) {
       this._paintSky("#040611", "#182338");
-      this.scene.fog = new THREE.Fog(0x0a0e18, 60, 520);
+      this.scene.fog = new THREE.Fog(0x0a0e18, 60, 560);
       this.hemi.intensity = 0.28;
       this.hemi.color.set(0x2a3a5c);
       this.hemi.groundColor.set(0x05060a);
@@ -80,7 +88,7 @@ class SceneCtx {
       this.fill.intensity = 0.18;
     } else {
       this._paintSky("#bfe3ff", "#eef8ff");
-      this.scene.fog = new THREE.Fog(0xdfeeff, 90, 640);
+      this.scene.fog = new THREE.Fog(0xdfeeff, 90, 680);
       this.hemi.intensity = 0.85;
       this.hemi.color.set(0xbfe0ff);
       this.hemi.groundColor.set(0x445566);
@@ -91,34 +99,44 @@ class SceneCtx {
     bus.emit("night-changed", night);
   }
 
-  setLampsVisible(lamps) {
-    if (!lamps) return;
-    lamps.children.forEach(pole => {
-      const bulb = pole.children[1];
-      if (bulb) bulb.material.emissiveIntensity = this.night ? 2.2 : 0.3;
-    });
+  setMode(mode) {
+    this.mode = mode;
+    // reset user offsets so each mode button gives a predictable default view
+    this.free.yaw = 0; this.free.pitch = 0; this.free.zoom = 1;
+    this.topZoom = 1;
+    this.orbit.theta = 0.6; this.orbit.phi = 1.15; this.orbit.radius = 16;
   }
 
-  setMode(mode) { this.mode = mode; }
-
-  _bindOrbitInput() {
+  _bindCameraInput() {
     const el = this.canvas;
     el.addEventListener("pointerdown", e => {
-      if (this.mode !== "orbit") return;
-      this._dragging = true; this._lastPointer = { x: e.clientX, y: e.clientY };
+      this._dragging = true;
+      this._lastPointer = { x: e.clientX, y: e.clientY };
+      try { el.setPointerCapture(e.pointerId); } catch (err) {}
     });
-    window.addEventListener("pointerup", () => this._dragging = false);
-    window.addEventListener("pointermove", e => {
+    const stop = e => { this._dragging = false; try { el.releasePointerCapture(e.pointerId); } catch (err) {} };
+    el.addEventListener("pointerup", stop);
+    el.addEventListener("pointercancel", stop);
+    el.addEventListener("pointermove", e => {
       if (!this._dragging) return;
       const dx = e.clientX - this._lastPointer.x, dy = e.clientY - this._lastPointer.y;
       this._lastPointer = { x: e.clientX, y: e.clientY };
-      this.orbit.theta -= dx * 0.006;
-      this.orbit.phi = clamp(this.orbit.phi - dy * 0.006, 0.25, 1.5);
+
+      if (this.mode === "orbit") {
+        this.orbit.theta -= dx * 0.006;
+        this.orbit.phi = clamp(this.orbit.phi - dy * 0.006, 0.2, 1.5);
+      } else if (this.mode === "top") {
+        // top-down: no rotation, just let wheel zoom handle it
+      } else {
+        this.free.yaw -= dx * 0.006;
+        this.free.pitch = clamp(this.free.pitch - dy * 0.004, -0.25, 0.85);
+      }
     });
     el.addEventListener("wheel", e => {
-      if (this.mode !== "orbit") return;
       e.preventDefault();
-      this.orbit.radius = clamp(this.orbit.radius + e.deltaY * 0.02, 5, 90);
+      if (this.mode === "orbit") this.orbit.radius = clamp(this.orbit.radius + e.deltaY * 0.02, 5, 90);
+      else if (this.mode === "top") this.topZoom = clamp(this.topZoom + e.deltaY * 0.0015, 0.35, 3.2);
+      else this.free.zoom = clamp(this.free.zoom + e.deltaY * 0.0015, 0.5, 2.6);
     }, { passive: false });
   }
 
@@ -127,16 +145,25 @@ class SceneCtx {
     let desired;
 
     if (this.mode === "chase") {
-      const back = 11, up = 5.2;
+      const yaw = carAngle + Math.PI + this.free.yaw;
+      const pitchAngle = 0.32 + this.free.pitch;
+      const dist = 12 * this.free.zoom;
       desired = new THREE.Vector3(
-        carPos.x - Math.sin(carAngle) * back,
-        up,
-        carPos.z - Math.cos(carAngle) * back
+        carPos.x + dist * Math.cos(pitchAngle) * Math.sin(yaw),
+        1.1 + dist * Math.sin(pitchAngle),
+        carPos.z + dist * Math.cos(pitchAngle) * Math.cos(yaw)
+      );
+    } else if (this.mode === "side") {
+      const yaw = carAngle + Math.PI / 2 + this.free.yaw;
+      const pitchAngle = 0.16 + this.free.pitch;
+      const dist = 24 * this.free.zoom;
+      desired = new THREE.Vector3(
+        carPos.x + dist * Math.cos(pitchAngle) * Math.sin(yaw),
+        1.4 + dist * Math.sin(pitchAngle),
+        carPos.z + dist * Math.cos(pitchAngle) * Math.cos(yaw)
       );
     } else if (this.mode === "top") {
-      desired = new THREE.Vector3(carPos.x, 95, carPos.z + 0.001);
-    } else if (this.mode === "side") {
-      desired = new THREE.Vector3(carPos.x + 26, 7, carPos.z);
+      desired = new THREE.Vector3(carPos.x, 95 * this.topZoom, carPos.z + 0.001);
     } else { // orbit
       const { theta, phi, radius } = this.orbit;
       desired = new THREE.Vector3(
@@ -146,7 +173,8 @@ class SceneCtx {
       );
     }
 
-    const damp = 1 - Math.pow(0.0008, dt);
+    const damp = this._camInitialized ? 1 - Math.pow(0.0008, dt) : 1;
+    this._camInitialized = true;
     this.camera.position.lerp(desired, this.mode === "top" ? 1 : damp);
     this._lookTarget = (this._lookTarget || target.clone()).lerp(target, damp);
     if (this.mode === "top") this.camera.up.set(0, 0, -1); else this.camera.up.set(0, 1, 0);

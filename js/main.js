@@ -14,9 +14,9 @@
 
   const road = buildRoad();
   sceneCtx.scene.add(road);
-  const environment = buildEnvironment(rng);
-  sceneCtx.scene.add(environment);
-  sceneCtx.setLampsVisible(environment.userData.lamps);
+  const city = new City(sceneCtx.scene, rng);
+  city.setNight(sceneCtx.night);
+  city.update(0);
 
   const roadLeft = -ROAD_WIDTH / 2 + CURB + 0.15;
   const roadRight = ROAD_WIDTH / 2 - CURB - 0.15;
@@ -67,7 +67,7 @@
   const lastReceivedByListener = new Map();
   let autopilotState = "forward";
   let autopilotTurnDir = 1;
-  let autopilotTurnTarget = 0;
+  let autopilotTurnRemaining = 0;
 
   UI.setPlayIcon(true);
 
@@ -109,7 +109,7 @@
     UI.resetAll();
   });
 
-  bus.on("night-toggle", night => sceneCtx.applyNight(night));
+  bus.on("night-toggle", night => { sceneCtx.applyNight(night); city.setNight(night); });
 
   bus.on("listener-add-request", () => addListener(clamp((rng() - 0.5) * PLAY_HALF_LEN, -PLAY_HALF_LEN + 20, PLAY_HALF_LEN - 20)));
   bus.on("listener-remove-request", id => removeListener(id));
@@ -124,32 +124,41 @@
   audioEngine.setVolume(settings.volume / 100);
 
   // ---------------------------------------------------------------- autopilot
-  function driveAutopilot(dt) {
+  // Pre-step: decide this frame's control flags. Any state transition into
+  // "turning" also seeds autopilotTurnRemaining; completion is measured from
+  // the *actual* angle delta car.update() produces (see post-step below), so
+  // there is no fragile target-angle comparison that could stall or spin.
+  function driveAutopilotPre() {
     if (autopilotState === "forward") {
       car.controls.forward = true; car.controls.reverse = false;
       car.controls.left = false; car.controls.right = false;
       const headingPositive = Math.cos(car.angle) >= 0;
       if (headingPositive && car.z > PLAY_HALF_LEN - 40) {
-        autopilotState = "turning"; autopilotTurnDir = 1;
-        autopilotTurnTarget = car.angle + Math.PI;
-        car.speed = Math.min(car.speed, 7); car.x = 0;
+        autopilotState = "turning"; autopilotTurnDir = 1; autopilotTurnRemaining = Math.PI;
+        car.speed = clamp(car.speed, 4, 7); car.x = 0;
       } else if (!headingPositive && car.z < -PLAY_HALF_LEN + 40) {
-        autopilotState = "turning"; autopilotTurnDir = -1;
-        autopilotTurnTarget = car.angle - Math.PI;
-        car.speed = Math.min(Math.abs(car.speed), 7);
-        car.speed = Math.abs(car.speed);
-        car.x = 0;
+        autopilotState = "turning"; autopilotTurnDir = -1; autopilotTurnRemaining = Math.PI;
+        car.speed = clamp(Math.abs(car.speed), 4, 7); car.x = 0;
       }
-    } else {
+    } else { // turning
       car.controls.forward = true; car.controls.reverse = false;
       car.controls.left = autopilotTurnDir > 0;
       car.controls.right = autopilotTurnDir < 0;
-      car.speed = clamp(car.speed, 4, 8);
-      if (Math.abs(((car.angle - autopilotTurnTarget + Math.PI * 3) % (Math.PI * 2)) - Math.PI) < 0.06) {
-        car.angle = autopilotTurnTarget;
-        car.controls.left = false; car.controls.right = false;
-        autopilotState = "forward";
-      }
+      car.speed = clamp(car.speed, 4, 7);
+    }
+  }
+
+  // Post-step: called right after car.update() with the angle it had before
+  // that update, so we can measure exactly how far it actually turned.
+  function driveAutopilotPost(prevAngle) {
+    if (autopilotState !== "turning") return;
+    let delta = car.angle - prevAngle;
+    while (delta > Math.PI) delta -= Math.PI * 2;
+    while (delta < -Math.PI) delta += Math.PI * 2;
+    autopilotTurnRemaining -= Math.abs(delta);
+    if (autopilotTurnRemaining <= 0) {
+      autopilotState = "forward";
+      car.controls.left = false; car.controls.right = false;
     }
   }
 
@@ -164,8 +173,12 @@
     if (running) {
       simClock += dt;
 
-      if (settings.driver === "auto") driveAutopilot(dt);
+      if (settings.driver === "auto") driveAutopilotPre();
+      const prevAngle = car.angle;
       const carState = car.update(dt, roadLeft, roadRight);
+      city.update(car.z);
+      city.animate(dt);
+      if (settings.driver === "auto") driveAutopilotPost(prevAngle);
 
       toneTimer -= dt;
       if (toneTimer <= 0) {
@@ -207,7 +220,13 @@
 
     UI.drawScope(audioEngine.getWaveform());
     UI.drawChart(simClock, settings.minFreq, settings.maxFreq);
-    UI.drawMinimap({ x: car.x, z: car.z, angle: car.angle }, listeners, dopplerField.events, ROAD_WIDTH);
+    const mapData = {
+      car: { x: car.x, z: car.z, angle: car.angle },
+      listeners, waveEvents: dopplerField.events, roadWidth: ROAD_WIDTH,
+      avenueOffset: AVENUE_OFFSET, crossStreets: city.crossStreetsNear(car.z, PLAY_HALF_LEN * 1.7), traffic: city.listTraffic(),
+    };
+    UI.drawMinimap(mapData);
+    if (UI.isMapOpen()) UI.drawBigMap(mapData);
     const vsMax = settings.maxSpeed / 3.6;
     const maxShiftRef = settings.maxFreq * settings.soundSpeed / Math.max(30, settings.soundSpeed - vsMax) - settings.maxFreq;
     UI.updateGauges(Math.abs(car.speed) * 3.6, settings.maxSpeed,

@@ -4,9 +4,11 @@
 // ============================================================================
 
 const ROAD_WIDTH = 26;
-const ROAD_HALF_LEN = 1400;
+const ROAD_HALF_LEN = 60000;
 const LANE_COUNT = 3;
 const CURB = 1.4;
+const AVENUE_OFFSET = 55;   // parallel side streets, either side of the main road
+const AVENUE_WIDTH = 7;
 
 function laneCenterX(laneIndex) {
   const laneWidth = (ROAD_WIDTH - 2 * CURB) / LANE_COUNT;
@@ -46,6 +48,27 @@ function makeLaneTexture() {
   return tex;
 }
 
+function makeAvenueTexture() {
+  const c = document.createElement("canvas");
+  c.width = 48; c.height = 512;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#20232b";
+  ctx.fillRect(0, 0, c.width, c.height);
+  for (let i = 0; i < 350; i++) {
+    ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.03})`;
+    ctx.fillRect(Math.random() * c.width, Math.random() * c.height, 2, 2);
+  }
+  ctx.fillStyle = "#e8c94a";
+  for (let y = 0; y < c.height; y += 46) ctx.fillRect(c.width / 2 - 2, y, 4, 22);
+  ctx.fillStyle = "#d8dde4";
+  ctx.fillRect(2, 0, 3, c.height);
+  ctx.fillRect(c.width - 5, 0, 3, c.height);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(1, ROAD_HALF_LEN * 2 / 46);
+  return tex;
+}
+
 function buildRoad() {
   const group = new THREE.Group();
   const tex = makeLaneTexture();
@@ -65,6 +88,20 @@ function buildRoad() {
     group.add(curb);
   });
 
+  // two parallel avenues (secondary streets) running the full length, either
+  // side of the main road — this is what turns "one road" into an actual grid
+  // once cross streets slice through it every block.
+  const aveTex = makeAvenueTexture();
+  const aveMat = new THREE.MeshStandardMaterial({ map: aveTex, roughness: 0.95 });
+  [-1, 1].forEach(side => {
+    const aveGeo = new THREE.PlaneGeometry(AVENUE_WIDTH, ROAD_HALF_LEN * 2);
+    const ave = new THREE.Mesh(aveGeo, aveMat);
+    ave.rotation.x = -Math.PI / 2;
+    ave.position.set(side * AVENUE_OFFSET, 0.01, 0);
+    ave.receiveShadow = true;
+    group.add(ave);
+  });
+
   const groundGeo = new THREE.PlaneGeometry(4000, ROAD_HALF_LEN * 2 + 400);
   const groundMat = new THREE.MeshStandardMaterial({ color: 0x141a22, roughness: 1 });
   const ground = new THREE.Mesh(groundGeo, groundMat);
@@ -76,74 +113,14 @@ function buildRoad() {
   return group;
 }
 
-// ---------------------------------------------------------------- environment
-function buildEnvironment(rng) {
-  const group = new THREE.Group();
-  const buildingMats = [0x1b2530, 0x1e2a37, 0x222e3b, 0x19212b].map(c =>
-    new THREE.MeshStandardMaterial({ color: c, roughness: 0.9 })
-  );
-  const winTex = makeWindowTexture();
-
-  for (let side = -1; side <= 1; side += 2) {
-    let z = -ROAD_HALF_LEN + 30;
-    while (z < ROAD_HALF_LEN - 30) {
-      const w = 10 + rng() * 14;
-      const d = 10 + rng() * 10;
-      const h = 14 + rng() * 46;
-      const gap = 6 + rng() * 16;
-      const bx = side * (ROAD_WIDTH / 2 + 10 + rng() * 24 + w / 2);
-
-      const geo = new THREE.BoxGeometry(w, h, d);
-      const mat = buildingMats[Math.floor(rng() * buildingMats.length)].clone();
-      const bld = new THREE.Mesh(geo, mat);
-      bld.position.set(bx, h / 2, z);
-      bld.castShadow = true; bld.receiveShadow = true;
-      group.add(bld);
-
-      // window face (front, facing road)
-      const faceGeo = new THREE.PlaneGeometry(w * 0.92, h * 0.92);
-      const faceMat = new THREE.MeshBasicMaterial({ map: winTex, transparent: true });
-      const face = new THREE.Mesh(faceGeo, faceMat);
-      face.position.set(0, 0, side < 0 ? d / 2 + 0.02 : -d / 2 - 0.02);
-      if (side > 0) face.rotation.y = Math.PI;
-      bld.add(face);
-
-      z += d + gap;
-    }
-  }
-
-  // streetlamps
-  const lampMat = new THREE.MeshStandardMaterial({ color: 0x30363f, roughness: 0.6, metalness: 0.4 });
-  const bulbMat = new THREE.MeshStandardMaterial({ color: 0xfff2c2, emissive: 0xffdf8a, emissiveIntensity: 1.4 });
-  const lamps = new THREE.Group();
-  for (let z = -ROAD_HALF_LEN + 20; z < ROAD_HALF_LEN; z += 55) {
-    [-1, 1].forEach(side => {
-      const poleGeo = new THREE.CylinderGeometry(0.16, 0.2, 8, 8);
-      const pole = new THREE.Mesh(poleGeo, lampMat);
-      pole.position.set(side * (ROAD_WIDTH / 2 + 1.4), 4, z);
-      pole.castShadow = true;
-      const armGeo = new THREE.CylinderGeometry(0.1, 0.1, 2.2, 6);
-      const arm = new THREE.Mesh(armGeo, lampMat);
-      arm.rotation.z = Math.PI / 2;
-      arm.position.set(side * -1.1, 3.9, 0);
-      pole.add(arm);
-      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 10), bulbMat);
-      bulb.position.set(side * -2.1, 3.9, 0);
-      pole.add(bulb);
-      lamps.add(pole);
-    });
-  }
-  group.add(lamps);
-  group.userData.lamps = lamps;
-
-  return group;
-}
+// ---------------------------------------------------------------- infinite city (chunk streaming)
+const CHUNK_SIZE = 150;
+const CHUNK_RADIUS = 5; // chunks kept loaded ahead & behind => ~1500m visible span
 
 function makeWindowTexture() {
   const c = document.createElement("canvas");
   c.width = 64; c.height = 96;
   const ctx = c.getContext("2d");
-  ctx.fillStyle = "rgba(0,0,0,0)";
   ctx.clearRect(0, 0, c.width, c.height);
   const cols = 4, rows = 7;
   const cw = c.width / cols, rh = c.height / rows;
@@ -154,8 +131,285 @@ function makeWindowTexture() {
       ctx.fillRect(cIdx * cw + 4, r * rh + 4, cw - 8, rh - 8);
     }
   }
-  const tex = new THREE.CanvasTexture(c);
-  return tex;
+  return new THREE.CanvasTexture(c);
+}
+
+function disposeGroupGeometry(root, sharedSet) {
+  root.traverse(obj => {
+    if (obj.isMesh && obj.geometry && !sharedSet.has(obj.geometry)) obj.geometry.dispose();
+  });
+}
+
+const CROSS_HALF_SPAN = AVENUE_OFFSET + 50; // how far each cross street reaches past the far band
+
+class City {
+  constructor(scene, rng) {
+    this.scene = scene;
+    this.rng = rng;
+    this.group = new THREE.Group();
+    scene.add(this.group);
+    this.chunks = new Map();
+    this.night = true;
+
+    this.buildingMats = [0x1b2530, 0x1e2a37, 0x222e3b, 0x19212b].map(c =>
+      new THREE.MeshStandardMaterial({ color: c, roughness: 0.9 })
+    );
+    this.winTex = makeWindowTexture();
+    this.winMat = new THREE.MeshBasicMaterial({ map: this.winTex, transparent: true });
+
+    this.lampMat = new THREE.MeshStandardMaterial({ color: 0x30363f, roughness: 0.6, metalness: 0.4 });
+    this.bulbMat = new THREE.MeshStandardMaterial({ color: 0xfff2c2, emissive: 0xffdf8a, emissiveIntensity: 2.2 });
+    this.lampGeo = {
+      pole: new THREE.CylinderGeometry(0.16, 0.2, 8, 8),
+      arm: new THREE.CylinderGeometry(0.1, 0.1, 2.2, 6),
+      bulb: new THREE.SphereGeometry(0.32, 10, 10),
+    };
+
+    // shared pedestrian resources — reused everywhere, never disposed
+    this.pedGeo = {
+      body: new THREE.CylinderGeometry(0.15, 0.19, 0.85, 8),
+      head: new THREE.SphereGeometry(0.15, 10, 10),
+    };
+    this.pedMats = [0xff6b6b, 0xffd166, 0x6bc7ef, 0x8dd3a0, 0xc39bd3, 0xf2f2f2, 0x6c7a89]
+      .map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.75 }));
+    this.skinMat = new THREE.MeshStandardMaterial({ color: 0xd9a066, roughness: 0.8 });
+
+    // shared cross-street (intersection) resources
+    this.crossTex = this._buildCrossTexture();
+    this.crossMat = new THREE.MeshStandardMaterial({ map: this.crossTex, roughness: 0.95 });
+    this.crossGeo = new THREE.PlaneGeometry(CROSS_HALF_SPAN * 2, 8);
+
+    // shared background-traffic resources
+    this.trafficGeo = {
+      body: new THREE.BoxGeometry(1.9, 1.0, 4.2),
+      cabin: new THREE.BoxGeometry(1.55, 0.5, 1.9),
+      wheel: new THREE.CylinderGeometry(0.35, 0.35, 0.26, 12),
+    };
+    this.trafficMats = [0xe74c3c, 0x3a8fe0, 0xf1c40f, 0xb9c1c9, 0x2ecc71, 0x9b6ce0, 0xff9f43]
+      .map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.25 }));
+    this.trafficCabinMat = new THREE.MeshStandardMaterial({ color: 0x151c26, roughness: 0.3 });
+    this.tireMat = new THREE.MeshStandardMaterial({ color: 0x0d0f12, roughness: 0.9 });
+
+    this._sharedGeo = new Set([
+      ...Object.values(this.lampGeo),
+      ...Object.values(this.pedGeo),
+      ...Object.values(this.trafficGeo),
+      this.crossGeo,
+    ]);
+
+    this.lastCenterChunk = null;
+  }
+
+  setNight(night) {
+    this.night = night;
+    this.bulbMat.emissiveIntensity = night ? 2.2 : 0.35;
+  }
+
+  _chunkRng(index) { return mulberry32(90001 + index * 104729); }
+
+  _buildCrossTexture() {
+    const c = document.createElement("canvas");
+    c.width = 700; c.height = 56;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#23262f";
+    ctx.fillRect(0, 0, c.width, c.height);
+    for (let i = 0; i < 500; i++) {
+      ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.03})`;
+      ctx.fillRect(Math.random() * c.width, Math.random() * c.height, 2, 2);
+    }
+    ctx.fillStyle = "#e8c94a";
+    for (let x = 14; x < c.width - 14; x += 42) ctx.fillRect(x, c.height / 2 - 2, 22, 4);
+    ctx.fillStyle = "#d8dde4";
+    ctx.fillRect(0, 3, c.width, 3);
+    ctx.fillRect(0, c.height - 6, c.width, 3);
+    return new THREE.CanvasTexture(c);
+  }
+
+  _makePedestrian(rng) {
+    const g = new THREE.Group();
+    const mat = this.pedMats[Math.floor(rng() * this.pedMats.length)];
+    const body = new THREE.Mesh(this.pedGeo.body, mat);
+    body.position.y = 0.52;
+    body.castShadow = false;
+    const head = new THREE.Mesh(this.pedGeo.head, this.skinMat);
+    head.position.y = 1.0;
+    g.add(body, head);
+    return g;
+  }
+
+  _makeTrafficCar(rng) {
+    const g = new THREE.Group();
+    const mat = this.trafficMats[Math.floor(rng() * this.trafficMats.length)];
+    const body = new THREE.Mesh(this.trafficGeo.body, mat);
+    body.position.y = 0.55;
+    g.add(body);
+    const cabin = new THREE.Mesh(this.trafficGeo.cabin, this.trafficCabinMat);
+    cabin.position.set(0, 1.05, 0.15);
+    g.add(cabin);
+    [[0.86, 0.32, 1.35], [-0.86, 0.32, 1.35], [0.86, 0.32, -1.35], [-0.86, 0.32, -1.35]].forEach(([wx, wy, wz]) => {
+      const wheel = new THREE.Mesh(this.trafficGeo.wheel, this.tireMat);
+      wheel.rotation.z = Math.PI / 2;
+      wheel.position.set(wx, wy, wz);
+      g.add(wheel);
+    });
+    return g;
+  }
+
+  _buildChunk(index) {
+    const rng = this._chunkRng(index);
+    const group = new THREE.Group();
+    const z0 = index * CHUNK_SIZE, z1 = z0 + CHUNK_SIZE;
+    const crossZ = z0 + CHUNK_SIZE * 0.5 + (rng() - 0.5) * 26;
+    const peds = [];
+    const traffic = [];
+
+    // the cross street: a small perpendicular road slicing through this block
+    const cross = new THREE.Mesh(this.crossGeo, this.crossMat);
+    cross.rotation.x = -Math.PI / 2;
+    cross.position.set(0, 0.015, crossZ);
+    cross.receiveShadow = true;
+    group.add(cross);
+
+    [-1, 1].forEach(side => {
+      // two building bands per side: "near" (between the main road and the
+      // avenue) and "far" (beyond the avenue) — together with the avenue and
+      // cross street this is what reads as an actual city block.
+      const bands = [
+        { xMin: 15, xMax: 40, wSpan: 12, hBase: 13, hSpan: 30 },
+        { xMin: AVENUE_OFFSET + 9, xMax: AVENUE_OFFSET + 46, wSpan: 16, hBase: 20, hSpan: 58 },
+      ];
+
+      bands.forEach(band => {
+        let z = z0 + rng() * 18;
+        while (z < z1) {
+          const w = 10 + rng() * band.wSpan;
+          const d = 11 + rng() * 11;
+          const h = band.hBase + rng() * band.hSpan;
+          const gap = 14 + rng() * 22;
+
+          if (z < crossZ + 6 && z + d > crossZ - 6) z = crossZ + 6; // leave the intersection clear
+
+          const bx = side * (band.xMin + rng() * (band.xMax - band.xMin) + w / 2);
+          const bld = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), this.buildingMats[Math.floor(rng() * this.buildingMats.length)]);
+          bld.position.set(bx, h / 2, z);
+          bld.castShadow = false; bld.receiveShadow = true;
+          group.add(bld);
+
+          const face = new THREE.Mesh(new THREE.PlaneGeometry(d * 0.92, h * 0.92), this.winMat);
+          if (side < 0) { face.position.set(w / 2 + 0.03, 0, 0); face.rotation.y = Math.PI / 2; }
+          else { face.position.set(-w / 2 - 0.03, 0, 0); face.rotation.y = -Math.PI / 2; }
+          bld.add(face);
+
+          z += d + gap;
+        }
+      });
+
+      for (let lz = z0 + rng() * 30; lz < z1; lz += 70 + rng() * 30) {
+        const pole = new THREE.Mesh(this.lampGeo.pole, this.lampMat);
+        pole.position.set(side * (ROAD_WIDTH / 2 + 1.4), 4, lz);
+        const arm = new THREE.Mesh(this.lampGeo.arm, this.lampMat);
+        arm.rotation.z = Math.PI / 2;
+        arm.position.set(side * -1.1, 3.9, 0);
+        pole.add(arm);
+        const bulb = new THREE.Mesh(this.lampGeo.bulb, this.bulbMat);
+        bulb.position.set(side * -2.1, 3.9, 0);
+        pole.add(bulb);
+        group.add(pole);
+      }
+
+      const pedCount = 1 + Math.floor(rng() * 3);
+      for (let i = 0; i < pedCount; i++) {
+        const ped = this._makePedestrian(rng);
+        const walkZ0 = z0 + rng() * CHUNK_SIZE * 0.6;
+        const walk = {
+          z0: walkZ0,
+          range: 18 + rng() * 45,
+          speed: 0.9 + rng() * 1.3,
+          dir: rng() < 0.5 ? 1 : -1,
+          phase: rng() * 10,
+        };
+        ped.userData.walk = walk;
+        ped.position.set(side * (ROAD_WIDTH / 2 + 2.6 + rng() * 3.2), 0, walkZ0);
+        ped.rotation.y = walk.dir > 0 ? 0 : Math.PI;
+        group.add(ped);
+        peds.push(ped);
+      }
+    });
+
+    // background traffic on the main road — main-road lanes are shared with
+    // the ambulance, so keep them to the outer two lanes and moving one way
+    // per lane like real traffic.
+    const trafficChance = 0.7;
+    [0, 2].forEach(lane => {
+      if (rng() >= trafficChance) return;
+      const car = this._makeTrafficCar(rng);
+      const dir = lane === 0 ? -1 : 1;
+      const startZ = z0 + rng() * CHUNK_SIZE;
+      car.position.set(laneCenterX(lane), 0, startZ);
+      car.rotation.y = dir > 0 ? 0 : Math.PI;
+      car.userData.drive = { dir, speed: 9 + rng() * 13 };
+      group.add(car);
+      traffic.push(car);
+    });
+
+    return { group, peds, traffic, crossZ };
+  }
+
+  update(carZ) {
+    const centerChunk = Math.floor(carZ / CHUNK_SIZE);
+    if (centerChunk === this.lastCenterChunk) return;
+    this.lastCenterChunk = centerChunk;
+
+    const need = new Set();
+    for (let i = centerChunk - CHUNK_RADIUS; i <= centerChunk + CHUNK_RADIUS; i++) need.add(i);
+
+    for (const [idx, rec] of this.chunks) {
+      if (!need.has(idx)) {
+        this.group.remove(rec.group);
+        disposeGroupGeometry(rec.group, this._sharedGeo);
+        this.chunks.delete(idx);
+      }
+    }
+    for (const idx of need) {
+      if (!this.chunks.has(idx)) {
+        const rec = this._buildChunk(idx);
+        this.group.add(rec.group);
+        this.chunks.set(idx, rec);
+      }
+    }
+  }
+
+  animate(dt) {
+    for (const [, rec] of this.chunks) {
+      for (const ped of rec.peds) {
+        const w = ped.userData.walk;
+        w.phase += dt;
+        let nz = ped.position.z + w.dir * w.speed * dt;
+        if (nz > w.z0 + w.range) { nz = w.z0 + w.range; w.dir = -1; ped.rotation.y = Math.PI; }
+        else if (nz < w.z0) { nz = w.z0; w.dir = 1; ped.rotation.y = 0; }
+        ped.position.z = nz;
+        ped.position.y = Math.abs(Math.sin(w.phase * 6.2)) * 0.05;
+      }
+      for (const car of rec.traffic) {
+        car.position.z += car.userData.drive.dir * car.userData.drive.speed * dt;
+      }
+    }
+  }
+
+  // cross-street z positions within a world-space window, for the map view
+  crossStreetsNear(z, range) {
+    const out = [];
+    for (const [, rec] of this.chunks) {
+      if (Math.abs(rec.crossZ - z) <= range) out.push(rec.crossZ);
+    }
+    return out;
+  }
+
+  listTraffic() {
+    const out = [];
+    for (const [, rec] of this.chunks) for (const car of rec.traffic) out.push({ x: car.position.x, z: car.position.z });
+    return out;
+  }
 }
 
 // ---------------------------------------------------------------- ambulance

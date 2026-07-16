@@ -3,12 +3,12 @@
 // Talks to the rest of the app only through `bus` events + the UI namespace.
 // ============================================================================
 
-const PLAY_HALF_LEN = 480;
+const PLAY_HALF_LEN = 900;
 
 const DEFAULT_SETTINGS = {
   minFreq: 500, maxFreq: 700, maxSpeed: 144, soundSpeed: 343,
   showWaves: true, showLabels: true, audioEnabled: true, volume: 55,
-  driver: "ambulance", camera: "chase", night: true,
+  driver: "auto", camera: "chase", night: true,
 };
 
 const UI = (() => {
@@ -29,6 +29,8 @@ const UI = (() => {
     formulaVars: $("formulaVars"),
     logTableBody: $("logTableBody"), btnExportCsv: $("btnExportCsv"),
     scopeCanvas: $("scopeCanvas"), chartCanvas: $("chartCanvas"), minimap: $("minimap"),
+    btnExpandMap: $("btnExpandMap"), btnOpenMap: $("btnOpenMap"), mapModal: $("mapModal"),
+    btnCloseMap: $("btnCloseMap"), bigMap: $("bigMap"),
     btnPlayPause: $("btnPlayPause"), iconPlay: $("iconPlay"), iconPause: $("iconPause"),
     btnReset: $("btnReset"), btnTheme: $("btnTheme"), btnHelp: $("btnHelp"), btnCloseHelp: $("btnCloseHelp"),
     helpModal: $("helpModal"), btnMenuToggle: $("btnMenuToggle"),
@@ -38,6 +40,7 @@ const UI = (() => {
   const scopeCtx = el.scopeCanvas.getContext("2d");
   const chartCtx = el.chartCanvas.getContext("2d");
   const mapCtx = el.minimap.getContext("2d");
+  const bigMapCtx = el.bigMap.getContext("2d");
 
   let logRows = [];
   const chartHistory = [];
@@ -137,6 +140,13 @@ const UI = (() => {
     el.btnCloseHelp.addEventListener("click", () => el.helpModal.classList.remove("show"));
     el.helpModal.addEventListener("click", e => { if (e.target === el.helpModal) el.helpModal.classList.remove("show"); });
     bus.on("key-help", () => el.helpModal.classList.toggle("show"));
+
+    const openMap = () => el.mapModal.classList.add("show");
+    const closeMap = () => el.mapModal.classList.remove("show");
+    el.btnExpandMap.addEventListener("click", openMap);
+    el.btnOpenMap.addEventListener("click", openMap);
+    el.btnCloseMap.addEventListener("click", closeMap);
+    el.mapModal.addEventListener("click", e => { if (e.target === el.mapModal) closeMap(); });
 
     el.btnMenuToggle.addEventListener("click", () => document.body.classList.toggle("panelsOpen"));
 
@@ -267,59 +277,89 @@ const UI = (() => {
     line("received", "#ff3d6e");
   }
 
-  // ---------------------------------------------------------------- minimap
-  function drawMinimap(car, listeners, waveEvents, roadWidth) {
-    const w = el.minimap.width, h = el.minimap.height;
-    mapCtx.clearRect(0, 0, w, h);
-    mapCtx.fillStyle = "#060a10";
-    mapCtx.fillRect(0, 0, w, h);
+  // ---------------------------------------------------------------- map (minimap + expanded modal share this)
+  function renderMap(ctx, canvasEl, data, zoomHalfLen) {
+    const { car, listeners, waveEvents, roadWidth, avenueOffset, crossStreets, traffic } = data;
+    const w = canvasEl.width, h = canvasEl.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#060a10";
+    ctx.fillRect(0, 0, w, h);
 
-    const pad = 18;
+    const pad = Math.max(14, w * 0.05);
     const usableH = h - pad * 2;
-    const zScale = usableH / (PLAY_HALF_LEN * 2.4);
-    const xScale = (w - pad * 2) / (roadWidth * 2.4);
+    const zScale = usableH / (zoomHalfLen * 2.4);
+    const xScale = Math.min((w - pad * 2) / (roadWidth * 6.2), zScale);
 
     const wx = x => w / 2 + x * xScale;
-    const wy = z => h / 2 - z * zScale;
+    const wy = z => h / 2 - (z - car.z) * zScale;
 
-    // road band
-    mapCtx.fillStyle = "rgba(255,255,255,.05)";
-    mapCtx.fillRect(wx(-roadWidth / 2), 0, roadWidth * xScale, h);
-    mapCtx.strokeStyle = "rgba(255,255,255,.12)";
-    mapCtx.setLineDash([4, 6]);
-    mapCtx.beginPath(); mapCtx.moveTo(w / 2, 0); mapCtx.lineTo(w / 2, h); mapCtx.stroke();
-    mapCtx.setLineDash([]);
+    // avenues (secondary streets either side of the main road)
+    ctx.fillStyle = "rgba(143,180,216,.16)";
+    ctx.fillRect(wx(avenueOffset - 3.5), 0, 7 * xScale, h);
+    ctx.fillRect(wx(-avenueOffset - 3.5), 0, 7 * xScale, h);
+
+    // cross streets (perpendicular blocks)
+    if (crossStreets) {
+      ctx.strokeStyle = "rgba(224,122,95,.55)";
+      ctx.lineWidth = Math.max(1, 2 * (w / 180));
+      for (const cz of crossStreets) {
+        const y = wy(cz);
+        ctx.beginPath(); ctx.moveTo(wx(-avenueOffset - 46), y); ctx.lineTo(wx(avenueOffset + 46), y); ctx.stroke();
+      }
+    }
+
+    // main road band + center dashes
+    ctx.fillStyle = "rgba(255,255,255,.06)";
+    ctx.fillRect(wx(-roadWidth / 2), 0, roadWidth * xScale, h);
+    ctx.strokeStyle = "rgba(232,201,74,.5)";
+    ctx.setLineDash([4, 6]);
+    ctx.beginPath(); ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, h); ctx.stroke();
+    ctx.setLineDash([]);
 
     // wave rings
     if (waveEvents) for (const ev of waveEvents) {
       const r = ev.radius * zScale;
-      if (r > Math.max(w, h)) continue;
-      mapCtx.beginPath();
-      mapCtx.arc(wx(ev.x), wy(ev.z), r, 0, Math.PI * 2);
-      mapCtx.strokeStyle = ev.tone === "nee" ? "rgba(255,61,110,.5)" : "rgba(63,214,255,.5)";
-      mapCtx.lineWidth = 1;
-      mapCtx.stroke();
+      if (r > Math.max(w, h) * 1.4) continue;
+      ctx.beginPath();
+      ctx.arc(wx(ev.x), wy(ev.z), r, 0, Math.PI * 2);
+      ctx.strokeStyle = ev.tone === "nee" ? "rgba(255,61,110,.5)" : "rgba(63,214,255,.5)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // traffic
+    if (traffic) {
+      ctx.fillStyle = "#f1c40f";
+      for (const t of traffic) {
+        const x = wx(t.x), y = wy(t.z);
+        if (x < -10 || x > w + 10 || y < -10 || y > h + 10) continue;
+        ctx.fillRect(x - 2.2, y - 2.2, 4.4, 4.4);
+      }
     }
 
     // listeners
     listeners.forEach(L => {
-      mapCtx.beginPath();
-      mapCtx.arc(wx(L.x), wy(L.z), 4, 0, Math.PI * 2);
-      mapCtx.fillStyle = "#" + L.color.toString(16).padStart(6, "0");
-      mapCtx.fill();
+      ctx.beginPath();
+      ctx.arc(wx(L.x), wy(L.z), Math.max(3, w * 0.022), 0, Math.PI * 2);
+      ctx.fillStyle = "#" + L.color.toString(16).padStart(6, "0");
+      ctx.fill();
     });
 
-    // car (triangle)
+    // car (triangle) — always centered vertically since the map follows the car
     const cx = wx(car.x), cz = wy(car.z);
-    mapCtx.save();
-    mapCtx.translate(cx, cz);
-    mapCtx.rotate(car.angle);
-    mapCtx.beginPath();
-    mapCtx.moveTo(0, -8); mapCtx.lineTo(5, 6); mapCtx.lineTo(-5, 6); mapCtx.closePath();
-    mapCtx.fillStyle = "#ffffff";
-    mapCtx.fill();
-    mapCtx.restore();
+    const tri = Math.max(6, w * 0.045);
+    ctx.save();
+    ctx.translate(cx, cz);
+    ctx.rotate(car.angle);
+    ctx.beginPath();
+    ctx.moveTo(0, -tri); ctx.lineTo(tri * 0.6, tri * 0.75); ctx.lineTo(-tri * 0.6, tri * 0.75); ctx.closePath();
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+    ctx.restore();
   }
+
+  function drawMinimap(data) { renderMap(mapCtx, el.minimap, data, PLAY_HALF_LEN * 0.55); }
+  function drawBigMap(data) { renderMap(bigMapCtx, el.bigMap, data, PLAY_HALF_LEN * 1.6); }
 
   const SLIDER_MAP = {
     minFreq: [el.minFreq, el.minFreqOut], maxFreq: [el.maxFreq, el.maxFreqOut],
@@ -343,9 +383,11 @@ const UI = (() => {
     el.listenerList.querySelectorAll('[data-role="freq"]').forEach(n => n.textContent = "—");
   }
 
+  function isMapOpen() { return el.mapModal.classList.contains("show"); }
+
   return {
     el, initControls, applySettingsToInputs, getSettings: () => settings, setSetting, setPlayIcon, hideLoadScreen,
     syncListeners, updateListenerFreq, updateGauges, updateFreqReadout, updateFormula,
-    pushLog, pushChartPoint, drawScope, drawChart, drawMinimap, resetAll,
+    pushLog, pushChartPoint, drawScope, drawChart, drawMinimap, drawBigMap, isMapOpen, resetAll,
   };
 })();

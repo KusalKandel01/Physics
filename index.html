@@ -51,6 +51,9 @@
     <button class="iconBtn" id="btnTheme" title="Toggle day / night">
       <svg viewBox="0 0 24 24" width="17" height="17"><path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36A5.5 5.5 0 0 1 12 3z" fill="currentColor"/></svg>
     </button>
+    <button class="iconBtn" id="btnOpenMap" title="City map">
+      <svg viewBox="0 0 24 24" width="17" height="17"><path d="M9 3 3 5v16l6-2 6 2 6-2V3l-6 2-6-2zm0 2.2 6 2v13.6l-6-2V5.2zM5 5.9l2-.7v13.5l-2 .7V5.9zm14 12.2-2 .7V5.3l2-.7v13.5z" fill="currentColor"/></svg>
+    </button>
     <button class="iconBtn" id="btnHelp" title="Shortcuts &amp; guide (?)">
       <svg viewBox="0 0 24 24" width="17" height="17"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm.9 15.6h-1.8v-1.8h1.8zm1.86-6.9c-.45.66-.9 1-1.4 1.36-.5.36-.76.72-.76 1.4h-1.6c0-1.03.4-1.55 1-2.02.53-.42.9-.7.9-1.24 0-.62-.5-1-1.24-1-.66 0-1.16.34-1.4.98l-1.5-.64c.4-1.1 1.4-1.84 2.9-1.84 1.66 0 2.9.94 2.9 2.4 0 .68-.3 1.16-.8 1.6z" fill="currentColor"/></svg>
     </button>
@@ -72,8 +75,8 @@
     <div class="fieldRow">
       <label>Driver</label>
       <div class="segmented small" id="driverSeg">
-        <button data-drive="ambulance" class="active">Ambulance</button>
-        <button data-drive="auto">Autopilot</button>
+        <button data-drive="ambulance">Ambulance</button>
+        <button data-drive="auto" class="active">Autopilot</button>
       </div>
     </div>
 
@@ -231,6 +234,27 @@
 <div id="minimapWrap" class="panel">
   <canvas id="minimap" width="180" height="260"></canvas>
   <span class="minimapLabel">Overhead</span>
+  <button class="mapExpandBtn" id="btnExpandMap" title="Open full map">⤢</button>
+</div>
+
+<!-- ======================= FULL MAP MODAL ======================= -->
+<div id="mapModal" class="modalOverlay">
+  <div class="modalCard mapCard">
+    <div class="modalHead">
+      <h3>City map</h3>
+      <button class="iconBtn" id="btnCloseMap">✕</button>
+    </div>
+    <div class="modalBody mapModalBody">
+      <canvas id="bigMap" width="640" height="640"></canvas>
+      <div class="mapLegend">
+        <span><i class="dotMain"></i>Main road</span>
+        <span><i class="dotAve"></i>Avenue</span>
+        <span><i class="dotCross"></i>Cross street</span>
+        <span><i class="dotTraf"></i>Traffic</span>
+        <span><i class="dotMic"></i>Listener</span>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ======================= MOBILE TOUCH CONTROLS ======================= -->
@@ -263,6 +287,15 @@
     <div class="modalBody">
       <p>An ambulance drives along the road, emitting alternating <b>nee&#8209;naw</b> siren pulses. Every pulse expands outward as a true spherical wavefront at the speed of sound &mdash; the ring you see is <em>not</em> attached to the car, exactly as a real pressure wave behaves.</p>
       <p>Because the source keeps moving while each wavefront expands, wavefronts bunch up ahead of the ambulance and stretch out behind it. A stationary listener therefore hears a <b>higher pitch</b> while the ambulance approaches and a <b>lower pitch</b> once it has passed &mdash; the Doppler effect.</p>
+      <h4>Camera</h4>
+      <ul>
+        <li>Every camera mode is drag-to-look-around and scroll-to-zoom — the buttons just pick your starting framing (chase, orbit, top-down, side).</li>
+        <li>Switching modes resets the view back to that mode's default framing.</li>
+      </ul>
+      <h4>The city</h4>
+      <ul>
+        <li>Buildings, streetlamps and pedestrians stream in around you as you drive and are recycled behind you, so the town never runs out.</li>
+      </ul>
       <h4>Controls</h4>
       <ul class="kbdList">
         <li><kbd>↑</kbd> accelerate &nbsp;<kbd>↓</kbd> brake / reverse &nbsp;<kbd>←</kbd><kbd>→</kbd> steer</li>

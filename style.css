@@ -15,6 +15,7 @@
   --amber:#ffb648;
   --violet:#7c5cff;
   --green:#3fffa1;
+  --scrim:7,10,16;
   --radius:14px;
   --radius-sm:9px;
   --font-ui: 'Space Grotesk', system-ui, sans-serif;
@@ -48,7 +49,7 @@ button{font-family:inherit;}
   position:fixed;top:0;left:0;right:0;z-index:40;
   height:56px;display:flex;align-items:center;justify-content:space-between;
   padding:0 14px;
-  background:linear-gradient(180deg, rgba(7,10,16,.92), rgba(7,10,16,.55) 80%, transparent);
+  background:linear-gradient(180deg, rgba(var(--scrim),.92), rgba(var(--scrim),.55) 80%, transparent);
   backdrop-filter:blur(6px);
 }
 .brand{display:flex;align-items:center;gap:10px;}
@@ -205,6 +206,23 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 }
 #minimap{display:block;border-radius:9px;}
 .minimapLabel{position:absolute;top:12px;left:16px;font-family:var(--font-mono);font-size:9px;color:var(--text-2);text-transform:uppercase;letter-spacing:.08em;}
+.mapExpandBtn{
+  position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:6px;
+  background:rgba(255,255,255,.08);border:1px solid var(--line);color:var(--text-1);cursor:pointer;font-size:12px;
+  display:flex;align-items:center;justify-content:center;
+}
+.mapExpandBtn:hover{color:var(--text-0);border-color:var(--line-strong);}
+
+.mapCard{width:min(720px,92vw);}
+.mapModalBody{display:flex;flex-direction:column;align-items:center;gap:14px;padding-top:6px;}
+#bigMap{width:100%;max-width:640px;aspect-ratio:1/1;border-radius:12px;background:#060a10;border:1px solid var(--line);}
+.mapLegend{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;font-size:11px;color:var(--text-2);}
+.mapLegend i{display:inline-block;width:10px;height:10px;margin-right:5px;vertical-align:middle;border-radius:2px;}
+.dotMain{background:#e8c94a;}
+.dotAve{background:#8fb4d8;}
+.dotCross{background:#e07a5f;}
+.dotTraf{background:#f1c40f;}
+.dotMic{background:#3fd6ff;}
 
 /* ---------------------------------- touch controls ---------------------------------- */
 #touchControls{position:fixed;bottom:16px;left:0;right:0;z-index:35;display:none;justify-content:space-between;padding:0 20px;pointer-events:none;}
@@ -219,7 +237,7 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 #hintBar{
   position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:20;
   display:flex;gap:16px;padding:8px 16px;border-radius:20px;
-  background:rgba(10,14,20,.7);border:1px solid var(--line);backdrop-filter:blur(8px);
+  background:rgba(var(--scrim),.7);border:1px solid var(--line);backdrop-filter:blur(8px);
   font-size:11px;color:var(--text-2);
 }
 #hintBar kbd{
@@ -248,14 +266,25 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 .kbdList kbd{background:rgba(255,255,255,.08);border:1px solid var(--line-strong);border-radius:4px;padding:2px 6px;font-family:var(--font-mono);font-size:11px;margin-right:2px;}
 
 /* ---------------------------------- day theme ---------------------------------- */
-body.day{ --bg-0:#cfe8ff; }
-body.day #topbar{background:linear-gradient(180deg, rgba(207,232,255,.94), rgba(207,232,255,.6) 80%, transparent);}
-body.day .panel{background:rgba(255,255,255,.72);border-color:rgba(20,40,70,.14);color:#101826;}
-body.day .panelHead{border-color:rgba(20,40,70,.12);}
-body.day .brandName,body.day .gaugeVal span,body.day .freqNum,body.day h2,body.day h3{color:#0d1420;}
-body.day .text1,body.day .fieldRow label,body.day .panelSub,body.day .panelSubHead,body.day .hint{color:#42536b;}
-body.day #hintBar{background:rgba(255,255,255,.72);color:#42536b;border-color:rgba(20,40,70,.14);}
-body.day .miniCanvas{background:#eaf4ff;}
+body.day{
+  --bg-0:#cfe8ff;
+  --bg-1:#eaf4ff;
+  --panel:rgba(255,255,255,.78);
+  --panel-solid:#f3f9ff;
+  --line:rgba(20,40,70,.14);
+  --line-strong:rgba(20,40,70,.30);
+  --text-0:#0d1420;
+  --text-1:#42536b;
+  --text-2:#6b7c94;
+  --scrim:207,232,255;
+}
+body.day #scene{ background:#bfe3ff; }
+body.day .loadWave{ color:var(--red); }
+body.day .miniCanvas{ background:#eaf4ff; }
+body.day #minimap{ background:#dceeff; }
+body.day input[type=range]::-webkit-slider-thumb{ border-color:#fff; }
+body.day .switch span{ background:rgba(20,40,70,.16); }
+body.day #hintBar kbd, body.day .kbdList kbd{ background:rgba(20,40,70,.08); color:var(--text-0); }
 
 /* ---------------------------------- responsive ---------------------------------- */
 @media (max-width: 1180px){
