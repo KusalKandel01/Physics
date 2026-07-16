@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>SIREN // Doppler Effect Lab</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ======================= LOADING SCREEN ======================= -->
+<div id="loadScreen">
+  <div class="loadMark">
+    <svg viewBox="0 0 120 40" class="loadWave"><polyline points="0,20 15,20 22,6 30,34 38,20 120,20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+  <div class="loadTitle">SIREN</div>
+  <div class="loadSub">calibrating acoustic field&hellip;</div>
+</div>
+
+<!-- ======================= 3D CANVAS ======================= -->
+<canvas id="scene"></canvas>
+
+<!-- ======================= TOP BAR ======================= -->
+<header id="topbar">
+  <div class="brand">
+    <span class="brandMark">
+      <svg viewBox="0 0 24 24" width="20" height="20"><path d="M2 12h4l2-7 4 14 3-10 2 5h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </span>
+    <div class="brandText">
+      <span class="brandName">SIREN</span>
+      <span class="brandTag">Doppler Effect Laboratory</span>
+    </div>
+  </div>
+
+  <div class="topActions">
+    <button class="iconBtn" id="btnPlayPause" title="Play / Pause (Space)" aria-label="Play or pause">
+      <svg id="iconPlay" viewBox="0 0 24 24" width="18" height="18"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+      <svg id="iconPause" viewBox="0 0 24 24" width="18" height="18" style="display:none"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></svg>
+    </button>
+    <button class="iconBtn" id="btnReset" title="Reset scenario (R)" aria-label="Reset">
+      <svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" fill="currentColor"/></svg>
+    </button>
+    <div class="divider"></div>
+    <div class="segmented" id="cameraSeg">
+      <button data-cam="chase" class="active">Chase</button>
+      <button data-cam="orbit">Orbit</button>
+      <button data-cam="top">Top</button>
+      <button data-cam="side">Side</button>
+    </div>
+    <div class="divider"></div>
+    <button class="iconBtn" id="btnTheme" title="Toggle day / night">
+      <svg viewBox="0 0 24 24" width="17" height="17"><path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36A5.5 5.5 0 0 1 12 3z" fill="currentColor"/></svg>
+    </button>
+    <button class="iconBtn" id="btnOpenMap" title="City map">
+      <svg viewBox="0 0 24 24" width="17" height="17"><path d="M9 3 3 5v16l6-2 6 2 6-2V3l-6 2-6-2zm0 2.2 6 2v13.6l-6-2V5.2zM5 5.9l2-.7v13.5l-2 .7V5.9zm14 12.2-2 .7V5.3l2-.7v13.5z" fill="currentColor"/></svg>
+    </button>
+    <button class="iconBtn" id="btnHelp" title="Shortcuts &amp; guide (?)">
+      <svg viewBox="0 0 24 24" width="17" height="17"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm.9 15.6h-1.8v-1.8h1.8zm1.86-6.9c-.45.66-.9 1-1.4 1.36-.5.36-.76.72-.76 1.4h-1.6c0-1.03.4-1.55 1-2.02.53-.42.9-.7.9-1.24 0-.62-.5-1-1.24-1-.66 0-1.16.34-1.4.98l-1.5-.64c.4-1.1 1.4-1.84 2.9-1.84 1.66 0 2.9.94 2.9 2.4 0 .68-.3 1.16-.8 1.6z" fill="currentColor"/></svg>
+    </button>
+    <button class="iconBtn menuToggle" id="btnMenuToggle" title="Panels">
+      <svg viewBox="0 0 24 24" width="18" height="18"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+</header>
+
+<!-- ======================= LEFT: CONTROL DECK ======================= -->
+<aside id="leftDeck" class="panel deck">
+  <div class="panelHead">
+    <h2>Control Deck</h2>
+    <span class="panelSub">source &amp; medium parameters</span>
+  </div>
+
+  <div class="deckBody">
+
+    <div class="fieldRow">
+      <label>Driver</label>
+      <div class="segmented small" id="driverSeg">
+        <button data-drive="ambulance">Ambulance</button>
+        <button data-drive="auto" class="active">Autopilot</button>
+      </div>
+    </div>
+
+    <div class="fieldGroup">
+      <div class="fieldRow slideRow">
+        <label for="minFreq">Siren&nbsp;low <span class="unit">Hz</span></label>
+        <input type="range" id="minFreq" min="100" max="1800" value="500" step="5">
+        <output id="minFreqOut">500</output>
+      </div>
+      <div class="fieldRow slideRow">
+        <label for="maxFreq">Siren&nbsp;high <span class="unit">Hz</span></label>
+        <input type="range" id="maxFreq" min="100" max="1800" value="700" step="5">
+        <output id="maxFreqOut">700</output>
+      </div>
+      <div class="fieldRow slideRow">
+        <label for="maxSpeed">Top speed <span class="unit">km/h</span></label>
+        <input type="range" id="maxSpeed" min="20" max="320" value="144" step="2">
+        <output id="maxSpeedOut">144</output>
+      </div>
+      <div class="fieldRow slideRow">
+        <label for="soundSpeed">Sound speed <span class="unit">m/s</span></label>
+        <input type="range" id="soundSpeed" min="60" max="343" value="343" step="1">
+        <output id="soundSpeedOut">343</output>
+      </div>
+      <p class="hint">Lower the sound speed to exaggerate the Doppler shift &mdash; useful for teaching the effect at safe, audible speeds.</p>
+    </div>
+
+    <div class="fieldGroup">
+      <div class="fieldRow">
+        <label>Presets</label>
+      </div>
+      <div class="presetGrid" id="presetGrid">
+        <button data-preset="ambulance">🚑 Ambulance</button>
+        <button data-preset="train">🚆 Train Horn</button>
+        <button data-preset="f1">🏎️ Race Car</button>
+        <button data-preset="jet">✈️ Low Jet Pass</button>
+      </div>
+    </div>
+
+    <div class="fieldGroup">
+      <div class="fieldRow toggleRow">
+        <label for="toggleWaves">Wavefronts</label>
+        <label class="switch"><input type="checkbox" id="toggleWaves" checked><span></span></label>
+      </div>
+      <div class="fieldRow toggleRow">
+        <label for="toggleLabels">Wave labels</label>
+        <label class="switch"><input type="checkbox" id="toggleLabels" checked><span></span></label>
+      </div>
+      <div class="fieldRow toggleRow">
+        <label for="toggleAudio">Siren audio</label>
+        <label class="switch"><input type="checkbox" id="toggleAudio" checked><span></span></label>
+      </div>
+      <div class="fieldRow slideRow">
+        <label for="volume">Volume</label>
+        <input type="range" id="volume" min="0" max="100" value="55" step="1">
+        <output id="volumeOut">55</output>
+      </div>
+    </div>
+
+    <div class="fieldGroup">
+      <div class="fieldRow">
+        <label>Listeners <span class="count" id="listenerCount">1</span></label>
+        <button class="ghostBtn" id="btnAddListener">+ Add</button>
+      </div>
+      <ul id="listenerList" class="listenerList"></ul>
+      <p class="hint">Drag a listener chip's slider to move it along the road, or select it and use ↑ / ↓ while <em>Listener control</em> is active.</p>
+    </div>
+
+  </div>
+</aside>
+
+<!-- ======================= RIGHT: TELEMETRY ======================= -->
+<aside id="rightDeck" class="panel deck">
+  <div class="panelHead">
+    <h2>Telemetry</h2>
+    <span class="panelSub">live acoustic readout</span>
+  </div>
+
+  <div class="deckBody">
+
+    <div class="gaugeRow">
+      <div class="gauge">
+        <svg viewBox="0 0 120 70" class="gaugeSvg">
+          <path d="M10 65 A50 50 0 0 1 110 65" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="8" stroke-linecap="round"/>
+          <path id="gaugeSpeedArc" d="M10 65 A50 50 0 0 1 110 65" fill="none" stroke="url(#gradSpeed)" stroke-width="8" stroke-linecap="round" stroke-dasharray="157" stroke-dashoffset="157"/>
+          <defs><linearGradient id="gradSpeed" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#3fd6ff"/><stop offset="100%" stop-color="#ff3d6e"/>
+          </linearGradient></defs>
+        </svg>
+        <div class="gaugeVal"><span id="speedValue">0</span><small>km/h</small></div>
+        <div class="gaugeLabel">Source speed</div>
+      </div>
+
+      <div class="gauge">
+        <svg viewBox="0 0 120 70" class="gaugeSvg">
+          <path d="M10 65 A50 50 0 0 1 110 65" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="8" stroke-linecap="round"/>
+          <path id="gaugeShiftArc" d="M10 65 A50 50 0 0 1 110 65" fill="none" stroke="url(#gradShift)" stroke-width="8" stroke-linecap="round" stroke-dasharray="157" stroke-dashoffset="157"/>
+          <defs><linearGradient id="gradShift" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#7c5cff"/><stop offset="100%" stop-color="#ffb648"/>
+          </linearGradient></defs>
+        </svg>
+        <div class="gaugeVal"><span id="shiftValue">0</span><small>Hz</small></div>
+        <div class="gaugeLabel">Doppler shift</div>
+      </div>
+    </div>
+
+    <div class="freqReadout">
+      <div class="freqCol">
+        <span class="freqTag">Emitted&nbsp;f₀</span>
+        <span class="freqNum" id="emittedFreqValue">&mdash;</span>
+      </div>
+      <svg class="freqArrow" viewBox="0 0 24 24" width="20" height="20"><path d="M4 12h13m0 0-4-4m4 4-4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div class="freqCol">
+        <span class="freqTag">Received&nbsp;f</span>
+        <span class="freqNum" id="receivedFreqValue">&mdash;</span>
+      </div>
+    </div>
+
+    <div class="fieldGroup">
+      <div class="panelSubHead">Oscilloscope</div>
+      <canvas id="scopeCanvas" width="300" height="70" class="miniCanvas"></canvas>
+    </div>
+
+    <div class="fieldGroup">
+      <div class="panelSubHead">Frequency vs. time</div>
+      <canvas id="chartCanvas" width="300" height="120" class="miniCanvas"></canvas>
+      <div class="legend">
+        <span><i class="dotEmit"></i>Emitted</span>
+        <span><i class="dotRecv"></i>Received</span>
+      </div>
+    </div>
+
+    <div class="fieldGroup">
+      <div class="panelSubHead">Live formula</div>
+      <div class="formulaBox" id="formulaBox">
+        f&nbsp;=&nbsp;f₀&nbsp;·&nbsp;<span class="frac"><span class="fracTop">v</span><span class="fracBot">v&nbsp;&minus;&nbsp;v<sub>s</sub>cos&theta;</span></span>
+      </div>
+      <div class="formulaVars" id="formulaVars">solving&hellip;</div>
+    </div>
+
+    <div class="fieldGroup">
+      <div class="panelSubHead">Event log <button class="ghostBtn tiny" id="btnExportCsv">Export CSV</button></div>
+      <div class="logTableWrap">
+        <table class="logTable" id="logTable">
+          <thead><tr><th>t</th><th>f₀</th><th>f</th><th>Δf</th></tr></thead>
+          <tbody id="logTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</aside>
+
+<!-- ======================= MINIMAP ======================= -->
+<div id="minimapWrap" class="panel">
+  <canvas id="minimap" width="180" height="260"></canvas>
+  <span class="minimapLabel">Overhead</span>
+  <button class="mapExpandBtn" id="btnExpandMap" title="Open full map">⤢</button>
+</div>
+
+<!-- ======================= FULL MAP MODAL ======================= -->
+<div id="mapModal" class="modalOverlay">
+  <div class="modalCard mapCard">
+    <div class="modalHead">
+      <h3>City map</h3>
+      <button class="iconBtn" id="btnCloseMap">✕</button>
+    </div>
+    <div class="modalBody mapModalBody">
+      <canvas id="bigMap" width="640" height="640"></canvas>
+      <div class="mapLegend">
+        <span><i class="dotMain"></i>Main road</span>
+        <span><i class="dotAve"></i>Avenue</span>
+        <span><i class="dotCross"></i>Cross street</span>
+        <span><i class="dotTraf"></i>Traffic</span>
+        <span><i class="dotMic"></i>Listener</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= MOBILE TOUCH CONTROLS ======================= -->
+<div id="touchControls">
+  <div class="touchPad" id="padSteer">
+    <button data-k="left" aria-label="Left">◀</button>
+    <button data-k="right" aria-label="Right">▶</button>
+  </div>
+  <div class="touchPad" id="padThrottle">
+    <button data-k="reverse" aria-label="Reverse">▼</button>
+    <button data-k="forward" aria-label="Forward">▲</button>
+  </div>
+</div>
+
+<!-- ======================= BOTTOM HINT BAR ======================= -->
+<div id="hintBar">
+  <span><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> drive</span>
+  <span><kbd>Space</kbd> play/pause</span>
+  <span><kbd>C</kbd> camera</span>
+  <span><kbd>?</kbd> help</span>
+</div>
+
+<!-- ======================= HELP MODAL ======================= -->
+<div id="helpModal" class="modalOverlay">
+  <div class="modalCard">
+    <div class="modalHead">
+      <h3>How the lab works</h3>
+      <button class="iconBtn" id="btnCloseHelp">✕</button>
+    </div>
+    <div class="modalBody">
+      <p>An ambulance drives along the road, emitting alternating <b>nee&#8209;naw</b> siren pulses. Every pulse expands outward as a true spherical wavefront at the speed of sound &mdash; the ring you see is <em>not</em> attached to the car, exactly as a real pressure wave behaves.</p>
+      <p>Because the source keeps moving while each wavefront expands, wavefronts bunch up ahead of the ambulance and stretch out behind it. A stationary listener therefore hears a <b>higher pitch</b> while the ambulance approaches and a <b>lower pitch</b> once it has passed &mdash; the Doppler effect.</p>
+      <h4>Camera</h4>
+      <ul>
+        <li>Every camera mode is drag-to-look-around and scroll-to-zoom — the buttons just pick your starting framing (chase, orbit, top-down, side).</li>
+        <li>Switching modes resets the view back to that mode's default framing.</li>
+      </ul>
+      <h4>The city</h4>
+      <ul>
+        <li>Buildings, streetlamps and pedestrians stream in around you as you drive and are recycled behind you, so the town never runs out.</li>
+      </ul>
+      <h4>Controls</h4>
+      <ul class="kbdList">
+        <li><kbd>↑</kbd> accelerate &nbsp;<kbd>↓</kbd> brake / reverse &nbsp;<kbd>←</kbd><kbd>→</kbd> steer</li>
+        <li><kbd>Space</kbd> play / pause simulation</li>
+        <li><kbd>C</kbd> cycle camera &nbsp; <kbd>R</kbd> reset scenario</li>
+        <li><kbd>?</kbd> toggle this guide</li>
+      </ul>
+      <h4>Tips</h4>
+      <ul>
+        <li>Switch <b>Driver</b> to Autopilot to sit back and watch the physics, or drive manually.</li>
+        <li>Add extra listeners to compare frequency shift at different distances simultaneously.</li>
+        <li>Lower the <b>sound speed</b> slider to make the effect dramatic even at low km/h.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/doppler.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/controls.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
