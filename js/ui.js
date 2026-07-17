@@ -237,9 +237,8 @@ const UI = (() => {
     scopeCtx.strokeStyle = "rgba(255,255,255,.06)";
     scopeCtx.beginPath(); scopeCtx.moveTo(0, h / 2); scopeCtx.lineTo(w, h / 2); scopeCtx.stroke();
     if (!data) { return; }
-    scopeCtx.lineWidth = 1.6;
+    scopeCtx.lineWidth = 1.4;
     scopeCtx.strokeStyle = "#3fd6ff";
-    scopeCtx.shadowColor = "#3fd6ff"; scopeCtx.shadowBlur = 4;
     scopeCtx.beginPath();
     const step = w / data.length;
     for (let i = 0; i < data.length; i++) {
@@ -248,7 +247,6 @@ const UI = (() => {
       if (i === 0) scopeCtx.moveTo(0, y); else scopeCtx.lineTo(i * step, y);
     }
     scopeCtx.stroke();
-    scopeCtx.shadowBlur = 0;
   }
 
   // ---------------------------------------------------------------- freq/time chart

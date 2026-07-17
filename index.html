@@ -5,6 +5,32 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>SIREN // Doppler Effect Lab</title>
 <link rel="stylesheet" href="style.css">
+<script>
+  // Catches script-load failures (e.g. the three.js CDN being blocked) and any
+  // runtime error, and shows it on screen instead of leaving a frozen loading
+  // screen with no clue what happened. Must run before every other script.
+  window.__sirenFatal = function (msg) {
+    try {
+      var scr = document.getElementById("loadScreen");
+      var box = document.getElementById("loadError");
+      if (scr) scr.classList.remove("hidden");
+      if (box) { box.style.display = "block"; box.textContent = msg; }
+      var sub = document.querySelector(".loadSub");
+      if (sub) sub.textContent = "failed to start — see details below";
+    } catch (e) {}
+    console.error("[SIREN fatal]", msg);
+  };
+  window.addEventListener("error", function (e) {
+    if (e.target && e.target.tagName === "SCRIPT") {
+      window.__sirenFatal("Couldn't load " + (e.target.src || "a required script") + " — check your internet connection (this page loads three.js from a CDN and needs it to run).");
+    } else {
+      window.__sirenFatal((e.message || "Script error") + (e.filename ? " (" + e.filename.split("/").pop() + ":" + e.lineno + ")" : ""));
+    }
+  }, true);
+  window.addEventListener("unhandledrejection", function (e) {
+    window.__sirenFatal("Unhandled error: " + (e.reason && e.reason.message ? e.reason.message : e.reason));
+  });
+</script>
 </head>
 <body>
 
@@ -15,7 +41,9 @@
   </div>
   <div class="loadTitle">SIREN</div>
   <div class="loadSub">calibrating acoustic field&hellip;</div>
+  <pre id="loadError"></pre>
 </div>
+<div class="buildTag">build rev5</div>
 
 <!-- ======================= 3D CANVAS ======================= -->
 <canvas id="scene"></canvas>
@@ -161,10 +189,7 @@
       <div class="gauge">
         <svg viewBox="0 0 120 70" class="gaugeSvg">
           <path d="M10 65 A50 50 0 0 1 110 65" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="8" stroke-linecap="round"/>
-          <path id="gaugeSpeedArc" d="M10 65 A50 50 0 0 1 110 65" fill="none" stroke="url(#gradSpeed)" stroke-width="8" stroke-linecap="round" stroke-dasharray="157" stroke-dashoffset="157"/>
-          <defs><linearGradient id="gradSpeed" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stop-color="#3fd6ff"/><stop offset="100%" stop-color="#ff3d6e"/>
-          </linearGradient></defs>
+          <path id="gaugeSpeedArc" d="M10 65 A50 50 0 0 1 110 65" fill="none" stroke="#3fd6ff" stroke-width="8" stroke-linecap="round" stroke-dasharray="157" stroke-dashoffset="157"/>
         </svg>
         <div class="gaugeVal"><span id="speedValue">0</span><small>km/h</small></div>
         <div class="gaugeLabel">Source speed</div>
@@ -173,10 +198,7 @@
       <div class="gauge">
         <svg viewBox="0 0 120 70" class="gaugeSvg">
           <path d="M10 65 A50 50 0 0 1 110 65" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="8" stroke-linecap="round"/>
-          <path id="gaugeShiftArc" d="M10 65 A50 50 0 0 1 110 65" fill="none" stroke="url(#gradShift)" stroke-width="8" stroke-linecap="round" stroke-dasharray="157" stroke-dashoffset="157"/>
-          <defs><linearGradient id="gradShift" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stop-color="#7c5cff"/><stop offset="100%" stop-color="#ffb648"/>
-          </linearGradient></defs>
+          <path id="gaugeShiftArc" d="M10 65 A50 50 0 0 1 110 65" fill="none" stroke="#ffb648" stroke-width="8" stroke-linecap="round" stroke-dasharray="157" stroke-dashoffset="157"/>
         </svg>
         <div class="gaugeVal"><span id="shiftValue">0</span><small>Hz</small></div>
         <div class="gaugeLabel">Doppler shift</div>
@@ -314,6 +336,13 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+  setTimeout(function () {
+    if (typeof THREE === "undefined") {
+      window.__sirenFatal("three.js never loaded (window.THREE is still undefined after 6s). This page needs the three.js library from cdnjs.cloudflare.com — check your internet connection, ad-blocker, or firewall, then reload.");
+    }
+  }, 6000);
+</script>
 <script src="js/utils.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/doppler.js"></script>

@@ -3,6 +3,9 @@
 // ============================================================================
 
 (function () {
+ try {
+  if (typeof THREE === "undefined") throw new Error("THREE is undefined — three.js did not load.");
+
   const rng = mulberry32(1337);
   const settings = UI.getSettings();
   UI.applySettingsToInputs();
@@ -165,6 +168,7 @@
   // ---------------------------------------------------------------- main loop
   let prevT = nowMs();
   function frame() {
+   try {
     const t = nowMs();
     let dt = (t - prevT) / 1000;
     prevT = t;
@@ -235,7 +239,15 @@
 
     sceneCtx.render();
     requestAnimationFrame(frame);
+   } catch (err) {
+    console.error(err);
+    if (window.__sirenFatal) window.__sirenFatal((err && err.message) || String(err));
+   }
   }
 
   requestAnimationFrame(() => { UI.hideLoadScreen(); requestAnimationFrame(frame); });
+ } catch (err) {
+  console.error(err);
+  if (window.__sirenFatal) window.__sirenFatal((err && err.message) || String(err));
+ }
 })();
