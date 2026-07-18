@@ -28,7 +28,8 @@ class AudioEngine {
 
   resume() {
     this.ensureContext();
-    if (this.ctx.state === "suspended") this.ctx.resume();
+    if (this.ctx.state === "suspended") return this.ctx.resume();
+    return Promise.resolve();
   }
 
   setVolume(v01) {
@@ -41,6 +42,11 @@ class AudioEngine {
   // Emits a short siren pulse frequency-swept toward `frequency`, attenuated by distance.
   playTone(frequency, distance) {
     if (!this.enabled) return;
+    if (!Number.isFinite(frequency) || !Number.isFinite(distance)) {
+      console.warn("[audio] ignoring non-finite tone request", frequency, distance);
+      return;
+    }
+    frequency = clamp(frequency, 20, 12000); // stay inside a real AudioParam's valid range regardless of upstream math
     this.ensureContext();
     if (this.ctx.state === "suspended") return; // no gesture yet
 

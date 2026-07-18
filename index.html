@@ -21,11 +21,18 @@
     console.error("[SIREN fatal]", msg);
   };
   window.addEventListener("error", function (e) {
-    if (e.target && e.target.tagName === "SCRIPT") {
-      window.__sirenFatal("Couldn't load " + (e.target.src || "a required script") + " — check your internet connection (this page loads three.js from a CDN and needs it to run).");
-    } else {
-      window.__sirenFatal((e.message || "Script error") + (e.filename ? " (" + e.filename.split("/").pop() + ":" + e.lineno + ")" : ""));
+    var t = e.target;
+    if (t && t !== window && t.tagName) {
+      // A resource failed to load. Only a <script> failing is actually fatal —
+      // fonts/images/stylesheets failing (e.g. Google Fonts blocked by an
+      // ad-blocker) is cosmetic at worst and must NOT freeze the app.
+      if (t.tagName === "SCRIPT") {
+        window.__sirenFatal("Couldn't load " + (t.src || "a required script") + " — check your internet connection (this page loads three.js from a CDN and needs it to run).");
+      }
+      return;
     }
+    // A genuine runtime script error (not a resource load failure).
+    window.__sirenFatal((e.message || "Unknown script error") + (e.filename ? " (" + e.filename.split("/").pop() + ":" + e.lineno + ")" : ""));
   }, true);
   window.addEventListener("unhandledrejection", function (e) {
     window.__sirenFatal("Unhandled error: " + (e.reason && e.reason.message ? e.reason.message : e.reason));
@@ -76,20 +83,23 @@
       <button data-cam="side">Side</button>
     </div>
     <div class="divider"></div>
-    <button class="iconBtn" id="btnTheme" title="Toggle day / night">
+    <button class="iconBtn" id="btnTheme" title="Toggle day / night" aria-label="Toggle day and night">
       <svg viewBox="0 0 24 24" width="17" height="17"><path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36A5.5 5.5 0 0 1 12 3z" fill="currentColor"/></svg>
     </button>
-    <button class="iconBtn" id="btnOpenMap" title="City map">
+    <button class="iconBtn" id="btnOpenMap" title="City map" aria-label="Open city map">
       <svg viewBox="0 0 24 24" width="17" height="17"><path d="M9 3 3 5v16l6-2 6 2 6-2V3l-6 2-6-2zm0 2.2 6 2v13.6l-6-2V5.2zM5 5.9l2-.7v13.5l-2 .7V5.9zm14 12.2-2 .7V5.3l2-.7v13.5z" fill="currentColor"/></svg>
     </button>
-    <button class="iconBtn" id="btnHelp" title="Shortcuts &amp; guide (?)">
+    <button class="iconBtn" id="btnHelp" title="Shortcuts &amp; guide (?)" aria-label="Open help and keyboard shortcuts">
       <svg viewBox="0 0 24 24" width="17" height="17"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm.9 15.6h-1.8v-1.8h1.8zm1.86-6.9c-.45.66-.9 1-1.4 1.36-.5.36-.76.72-.76 1.4h-1.6c0-1.03.4-1.55 1-2.02.53-.42.9-.7.9-1.24 0-.62-.5-1-1.24-1-.66 0-1.16.34-1.4.98l-1.5-.64c.4-1.1 1.4-1.84 2.9-1.84 1.66 0 2.9.94 2.9 2.4 0 .68-.3 1.16-.8 1.6z" fill="currentColor"/></svg>
     </button>
-    <button class="iconBtn menuToggle" id="btnMenuToggle" title="Panels">
+    <button class="iconBtn menuToggle" id="btnMenuToggle" title="Panels" aria-label="Toggle control panels">
       <svg viewBox="0 0 24 24" width="18" height="18"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
     </button>
   </div>
 </header>
+
+<!-- ======================= AUDIO UNLOCK HINT ======================= -->
+<div id="audioHint" class="audioHint">🔇 Tap anywhere to enable sound</div>
 
 <!-- ======================= LEFT: CONTROL DECK ======================= -->
 <aside id="leftDeck" class="panel deck">
@@ -205,7 +215,7 @@
       </div>
     </div>
 
-    <div class="freqReadout">
+    <div class="freqReadout" aria-live="polite" aria-atomic="true">
       <div class="freqCol">
         <span class="freqTag">Emitted&nbsp;f₀</span>
         <span class="freqNum" id="emittedFreqValue">&mdash;</span>
@@ -256,7 +266,8 @@
 <div id="minimapWrap" class="panel">
   <canvas id="minimap" width="180" height="260"></canvas>
   <span class="minimapLabel">Overhead</span>
-  <button class="mapExpandBtn" id="btnExpandMap" title="Open full map">⤢</button>
+  <button class="mapExpandBtn" id="btnExpandMap" title="Open full map" aria-label="Open full map">⤢</button>
+  <div class="miniLegend"><span><i class="dotEmit" style="background:#ff3d6e"></i>nee</span><span><i class="dotEmit" style="background:#3fd6ff"></i>naw</span></div>
 </div>
 
 <!-- ======================= FULL MAP MODAL ======================= -->
@@ -264,7 +275,7 @@
   <div class="modalCard mapCard">
     <div class="modalHead">
       <h3>City map</h3>
-      <button class="iconBtn" id="btnCloseMap">✕</button>
+      <button class="iconBtn" id="btnCloseMap" aria-label="Close map">✕</button>
     </div>
     <div class="modalBody mapModalBody">
       <canvas id="bigMap" width="640" height="640"></canvas>
@@ -304,7 +315,7 @@
   <div class="modalCard">
     <div class="modalHead">
       <h3>How the lab works</h3>
-      <button class="iconBtn" id="btnCloseHelp">✕</button>
+      <button class="iconBtn" id="btnCloseHelp" aria-label="Close help">✕</button>
     </div>
     <div class="modalBody">
       <p>An ambulance drives along the road, emitting alternating <b>nee&#8209;naw</b> siren pulses. Every pulse expands outward as a true spherical wavefront at the speed of sound &mdash; the ring you see is <em>not</em> attached to the car, exactly as a real pressure wave behaves.</p>
@@ -313,6 +324,12 @@
       <ul>
         <li>Every camera mode is drag-to-look-around and scroll-to-zoom — the buttons just pick your starting framing (chase, orbit, top-down, side).</li>
         <li>Switching modes resets the view back to that mode's default framing.</li>
+      </ul>
+      <h4>Assumptions worth knowing</h4>
+      <ul>
+        <li>Each wavefront's source velocity is fixed at the instant it was emitted — it doesn't keep tracking the car as it propagates.</li>
+        <li>The default sound speed (343 m/s) is the standard value at sea level; the slider lets you lower it to exaggerate the effect, not to model weather.</li>
+        <li>There's no air absorption, occlusion by buildings, or wind — every pitch fades with distance identically.</li>
       </ul>
       <h4>The city</h4>
       <ul>

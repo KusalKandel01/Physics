@@ -50,6 +50,13 @@ button{font-family:inherit;}
   padding:14px 16px;margin-top:6px;
 }
 .buildTag{position:fixed;bottom:10px;right:12px;font-family:var(--font-mono);font-size:10px;color:var(--text-2);opacity:.5;}
+.audioHint{
+  position:fixed;top:66px;left:50%;transform:translateX(-50%);z-index:50;
+  background:rgba(var(--scrim),.85);border:1px solid var(--line-strong);color:var(--text-0);
+  font-family:var(--font-mono);font-size:11.5px;padding:8px 16px;border-radius:20px;
+  backdrop-filter:blur(8px);opacity:0;pointer-events:none;transition:opacity .3s ease;
+}
+.audioHint.show{opacity:1;}
 
 /* ---------------------------------- topbar ---------------------------------- */
 #topbar{
@@ -163,6 +170,8 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
   display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.03);
   border:1px solid var(--line);border-radius:9px;padding:8px 10px;
 }
+.listenerChip.shake{animation:chipShake .4s ease;}
+@keyframes chipShake{0%,100%{transform:translateX(0);}20%{transform:translateX(-4px);}40%{transform:translateX(4px);}60%{transform:translateX(-3px);}80%{transform:translateX(3px);}}
 .listenerChip .swatch{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}
 .listenerChip .lName{font-size:11.5px;color:var(--text-1);flex:0 0 54px;}
 .listenerChip input[type=range]{flex:1 1 auto;}
@@ -208,7 +217,7 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 
 /* ---------------------------------- minimap ---------------------------------- */
 #minimapWrap{
-  position:fixed;left:14px;bottom:14px;z-index:25;padding:8px;
+  position:fixed;left:50%;transform:translateX(-50%);bottom:60px;z-index:25;padding:8px;
   display:block;
 }
 #minimap{display:block;border-radius:9px;}
@@ -219,6 +228,8 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
   display:flex;align-items:center;justify-content:center;
 }
 .mapExpandBtn:hover{color:var(--text-0);border-color:var(--line-strong);}
+.miniLegend{position:absolute;bottom:8px;left:16px;right:16px;display:flex;gap:12px;font-size:9px;font-family:var(--font-mono);color:var(--text-2);text-transform:uppercase;letter-spacing:.05em;}
+.miniLegend i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px;vertical-align:middle;}
 
 .mapCard{width:min(720px,92vw);}
 .mapModalBody{display:flex;flex-direction:column;align-items:center;gap:14px;padding-top:6px;}
@@ -309,4 +320,7 @@ body.day #hintBar kbd, body.day .kbdList kbd{ background:rgba(20,40,70,.08); col
   .deck{width:88vw;top:64px;}
   .brandTag{display:none;}
   #minimapWrap{display:none;}
+  #cameraSeg, .topActions .divider{display:none;}
+  .topActions{gap:5px;}
+  #topbar{padding:0 8px;}
 }

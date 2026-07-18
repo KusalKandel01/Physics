@@ -100,6 +100,7 @@ class SceneCtx {
   }
 
   setMode(mode) {
+    if (mode === this.mode) return; // re-selecting the same mode shouldn't discard your view
     this.mode = mode;
     // reset user offsets so each mode button gives a predictable default view
     this.free.yaw = 0; this.free.pitch = 0; this.free.zoom = 1;

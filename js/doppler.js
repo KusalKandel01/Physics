@@ -37,7 +37,7 @@ class SoundEvent {
     const denom = this.soundSpeed - vSrcTowardListener;
     const safeDenom = Math.abs(denom) < 8 ? Math.sign(denom || 1) * 8 : denom;
     const rawF = this.sourceFreq * (this.soundSpeed + vListenerTowardSrc) / safeDenom;
-    const f = clamp(rawF, 20, 5000);
+    const f = Number.isFinite(rawF) ? clamp(rawF, 20, 5000) : this.sourceFreq;
     return { frequency: f, distance, vSrcTowardListener, vListenerTowardSrc };
   }
 

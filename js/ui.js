@@ -123,10 +123,18 @@ const UI = (() => {
     });
 
     el.btnAddListener.addEventListener("click", () => bus.emit("listener-add-request"));
+    bus.on("listener-remove-denied", id => {
+      const li = [...el.listenerList.children].find(n => n._id === id);
+      if (!li) return;
+      li.classList.remove("shake"); void li.offsetWidth; li.classList.add("shake");
+    });
 
     el.btnPlayPause.addEventListener("click", () => bus.emit("toggle-play"));
     bus.on("key-space", () => bus.emit("toggle-play"));
-    el.btnReset.addEventListener("click", () => bus.emit("reset-request"));
+    el.btnReset.addEventListener("click", () => {
+      if (logRows.length > 3 && !confirm("Reset the scenario? This clears the current log and chart.")) return;
+      bus.emit("reset-request");
+    });
     bus.on("key-reset", () => bus.emit("reset-request"));
 
     el.btnTheme.addEventListener("click", () => {
@@ -153,7 +161,8 @@ const UI = (() => {
     el.btnExportCsv.addEventListener("click", () => {
       const header = "time_s,emitted_hz,received_hz,shift_hz,listener\n";
       const body = logRows.map(r => `${r.t},${r.f0},${r.f},${r.df},${r.who}`).join("\n");
-      downloadTextFile("doppler-log.csv", header + body);
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      downloadTextFile(`doppler-log-${stamp}.csv`, header + body);
     });
   }
 
@@ -181,6 +190,7 @@ const UI = (() => {
       const range = li.querySelector("input");
       range.addEventListener("input", () => bus.emit("listener-move", { id: L.id, z: Number(range.value) }));
       li.querySelector(".lDel").addEventListener("click", () => bus.emit("listener-remove-request", L.id));
+      li._delBtn = li.querySelector(".lDel");
       li._freqEl = li.querySelector('[data-role="freq"]');
       li._id = L.id;
       el.listenerList.appendChild(li);
@@ -336,11 +346,19 @@ const UI = (() => {
     }
 
     // listeners
-    listeners.forEach(L => {
+    listeners.forEach((L, i) => {
+      const r = Math.max(3, w * 0.022);
+      const lx = wx(L.x), ly = wy(L.z);
       ctx.beginPath();
-      ctx.arc(wx(L.x), wy(L.z), Math.max(3, w * 0.022), 0, Math.PI * 2);
+      ctx.arc(lx, ly, r, 0, Math.PI * 2);
       ctx.fillStyle = "#" + L.color.toString(16).padStart(6, "0");
       ctx.fill();
+      if (r >= 6) {
+        ctx.fillStyle = "#0a0e14";
+        ctx.font = `bold ${Math.round(r * 1.1)}px sans-serif`;
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(String(i + 1), lx, ly + 0.5);
+      }
     });
 
     // car (triangle) — always centered vertically since the map follows the car

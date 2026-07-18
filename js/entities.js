@@ -198,6 +198,8 @@ class City {
     ]);
 
     this.lastCenterChunk = null;
+    this._pending = [];
+    this._buildBudget = 3; // chunks built per frame — avoids a big hitch on teleports (e.g. Reset)
   }
 
   setNight(night) {
@@ -357,25 +359,32 @@ class City {
 
   update(carZ) {
     const centerChunk = Math.floor(carZ / CHUNK_SIZE);
-    if (centerChunk === this.lastCenterChunk) return;
-    this.lastCenterChunk = centerChunk;
+    if (centerChunk !== this.lastCenterChunk) {
+      this.lastCenterChunk = centerChunk;
+      const need = new Set();
+      for (let i = centerChunk - CHUNK_RADIUS; i <= centerChunk + CHUNK_RADIUS; i++) need.add(i);
 
-    const need = new Set();
-    for (let i = centerChunk - CHUNK_RADIUS; i <= centerChunk + CHUNK_RADIUS; i++) need.add(i);
-
-    for (const [idx, rec] of this.chunks) {
-      if (!need.has(idx)) {
-        this.group.remove(rec.group);
-        disposeGroupGeometry(rec.group, this._sharedGeo);
-        this.chunks.delete(idx);
+      for (const [idx, rec] of this.chunks) {
+        if (!need.has(idx)) {
+          this.group.remove(rec.group);
+          disposeGroupGeometry(rec.group, this._sharedGeo);
+          this.chunks.delete(idx);
+        }
       }
+
+      const missing = [...need].filter(idx => !this.chunks.has(idx) && !this._pending.includes(idx));
+      missing.sort((a, b) => Math.abs(a - centerChunk) - Math.abs(b - centerChunk));
+      this._pending.push(...missing);
+      this._pending = this._pending.filter(idx => need.has(idx)); // drop stale requests if car moved on again
     }
-    for (const idx of need) {
-      if (!this.chunks.has(idx)) {
-        const rec = this._buildChunk(idx);
-        this.group.add(rec.group);
-        this.chunks.set(idx, rec);
-      }
+
+    let budget = this._buildBudget;
+    while (budget-- > 0 && this._pending.length) {
+      const idx = this._pending.shift();
+      if (this.chunks.has(idx)) continue;
+      const rec = this._buildChunk(idx);
+      this.group.add(rec.group);
+      this.chunks.set(idx, rec);
     }
   }
 

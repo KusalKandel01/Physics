@@ -36,22 +36,37 @@
 
   let listenerIdSeq = 1;
   const listeners = [];
+  function saveListenerState() {
+    try { localStorage.setItem("siren-lab-listeners", JSON.stringify(listeners.map(l => l.z))); } catch (e) {}
+  }
+  function loadListenerState() {
+    try {
+      const raw = localStorage.getItem("siren-lab-listeners");
+      if (!raw) return null;
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) && arr.length ? arr.slice(0, 6) : null;
+    } catch (e) { return null; }
+  }
   function addListener(z) {
     const L = new Listener(listenerIdSeq++, ROAD_WIDTH / 2 + 6, z ?? 0, listeners.length);
     listeners.push(L);
     sceneCtx.scene.add(L.group);
     UI.syncListeners(listeners);
+    saveListenerState();
     return L;
   }
   function removeListener(id) {
-    if (listeners.length <= 1) return;
+    if (listeners.length <= 1) { bus.emit("listener-remove-denied", id); return; }
     const idx = listeners.findIndex(l => l.id === id);
     if (idx === -1) return;
     listeners[idx].dispose(sceneCtx.scene);
     listeners.splice(idx, 1);
     UI.syncListeners(listeners);
+    saveListenerState();
   }
-  addListener(0);
+  const savedListenerZs = loadListenerState();
+  if (savedListenerZs) savedListenerZs.forEach(z => addListener(clamp(z, -PLAY_HALF_LEN, PLAY_HALF_LEN)));
+  else addListener(0);
 
   // ---------------------------------------------------------------- presets
   const PRESETS = {
@@ -78,7 +93,7 @@
   bus.on("settings-changed", ({ key, value }) => {
     settings[key] = value;
     if (key === "maxSpeed") car.maxSpeed = value / 3.6;
-    if (key === "audioEnabled") audioEngine.setEnabled(value);
+    if (key === "audioEnabled") { audioEngine.setEnabled(value); if (!value) hideAudioHint(); }
     if (key === "volume") audioEngine.setVolume(value / 100);
     if (key === "showWaves") waveRingPool.setVisible(value);
   });
@@ -118,11 +133,18 @@
   bus.on("listener-remove-request", id => removeListener(id));
   bus.on("listener-move", ({ id, z }) => {
     const L = listeners.find(l => l.id === id);
-    if (L) L.setZ(z, 1 / 60);
+    if (L) { L.setZ(z, 1 / 60); saveListenerState(); }
   });
 
   // first user gesture unlocks audio
-  ["pointerdown", "keydown"].forEach(evt => window.addEventListener(evt, () => audioEngine.resume(), { once: true }));
+  const audioHintEl = document.getElementById("audioHint");
+  function hideAudioHint() { if (audioHintEl) audioHintEl.classList.remove("show"); }
+  if (audioHintEl && settings.audioEnabled) {
+    setTimeout(() => audioHintEl.classList.add("show"), 600);
+  }
+  ["pointerdown", "keydown"].forEach(evt => window.addEventListener(evt, () => {
+    audioEngine.resume().then(hideAudioHint).catch(hideAudioHint);
+  }, { once: true }));
   audioEngine.setEnabled(settings.audioEnabled);
   audioEngine.setVolume(settings.volume / 100);
 
@@ -207,8 +229,8 @@
           lastReceivedByListener.set(L.id, hit.frequency);
           UI.updateListenerFreq(L.id, fmt(hit.frequency, 0) + " Hz");
           UI.pushLog({ t: fmt(simClock, 1), f0: fmt(hit.event.sourceFreq, 0), f: fmt(hit.frequency, 0), df: fmt(hit.frequency - hit.event.sourceFreq, 0) });
+          audioEngine.playTone(hit.frequency, hit.distance);
           if (idx === 0) {
-            audioEngine.playTone(hit.frequency, hit.distance);
             UI.updateFreqReadout(hit.event.sourceFreq, hit.frequency);
             const thetaDeg = Math.acos(clamp(hit.vSrcTowardListener / Math.max(1e-3, Math.hypot(carState.vx, carState.vz) || 1), -1, 1)) * 180 / Math.PI;
             UI.updateFormula(settings.soundSpeed, hit.vSrcTowardListener, isFinite(thetaDeg) ? thetaDeg : 0, "Mic 1");
